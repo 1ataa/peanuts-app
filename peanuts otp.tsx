@@ -148,7 +148,7 @@ export default function App() {
             <form onSubmit={handleVerifyOtp} className="space-y-4">
               <div className="text-left">
                 <label className="text-xs text-neutral-400 mb-1 block font-medium">
-                  กรอกรหัส OTP 6 หลักที่ได้รับในอีเมล
+                  กรอกรหัส OTP 8 หลักที่ได้รับในอีเมล
                 </label>
                 <div className="relative">
                   <KeyRound className="absolute left-3 top-3.5 w-5 h-5 text-neutral-400" />
