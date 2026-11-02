@@ -1,10 +1,16 @@
 import React from 'react';
 import { 
   Flame, ShieldCheck, Heart, AlertTriangle, CheckCircle2, 
-  Users, ArrowRight, BookOpen, Lock 
+  Users, ArrowRight, BookOpen, Lock, MessageSquare 
 } from 'lucide-react';
 
-export default function PeanutsLanding({ onStart }: { onStart: () => void }) {
+export default function PeanutsLanding({ 
+  onStart, 
+  onPublicChat 
+}: { 
+  onStart: () => void; 
+  onPublicChat: () => void; 
+}) {
   return (
     <div className="flex justify-center items-center min-h-screen bg-slate-900 font-sans p-0 sm:p-4 text-slate-100">
       <div className="w-full max-w-md h-[100vh] sm:h-[880px] bg-slate-950 sm:rounded-3xl shadow-2xl flex flex-col overflow-y-auto border border-slate-800 relative">
@@ -25,7 +31,7 @@ export default function PeanutsLanding({ onStart }: { onStart: () => void }) {
         {/* CONTENT BODY */}
         <div className="p-5 flex-1 flex flex-col gap-5">
 
-          {/* OBJECTIVES / วัตถุประสงค์ */}
+          {/* OBJECTIVES */}
           <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-col gap-3">
             <h2 className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
               <BookOpen className="w-4 h-4 text-amber-400" /> วัตถุประสงค์ของแอปพลิเคชัน
@@ -46,7 +52,7 @@ export default function PeanutsLanding({ onStart }: { onStart: () => void }) {
             </ul>
           </div>
 
-          {/* RULES / กฎข้อบังคับและข้อห้าม */}
+          {/* RULES */}
           <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 flex flex-col gap-3">
             <h2 className="text-xs font-bold text-rose-400 uppercase tracking-wider flex items-center gap-2">
               <AlertTriangle className="w-4 h-4 text-rose-400" /> กฎข้อบังคับและข้อห้าม
@@ -73,14 +79,24 @@ export default function PeanutsLanding({ onStart }: { onStart: () => void }) {
 
         </div>
 
-        {/* FOOTER CTA BUTTON */}
-        <div className="p-5 bg-slate-950/90 border-t border-slate-800/80 sticky bottom-0 z-10">
+        {/* FOOTER CTA BUTTONS */}
+        <div className="p-5 bg-slate-950/90 border-t border-slate-800/80 sticky bottom-0 z-10 flex flex-col gap-2.5">
+          {/* ปุ่มที่ 1: เข้าใช้งานแอปหลัก (ต้อง ยืนยัน OTP) */}
           <button 
             onClick={onStart}
-            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-sm hover:opacity-90 active:scale-95 transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
+            className="w-full py-3.5 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs hover:opacity-90 active:scale-95 transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/20"
           >
-            <span>ยอมรับเงื่อนไขและเข้าสู่ระบบ</span>
+            <span>ยอมรับเงื่อนไขและเข้าสู่ระบบจับคู่</span>
             <ArrowRight className="w-4 h-4" />
+          </button>
+
+          {/* ปุ่มที่ 2: ปุ่มใหม่ เข้าห้องแชทสาธารณะ (ไม่ต้อง Login) */}
+          <button 
+            onClick={onPublicChat}
+            className="w-full py-3 rounded-2xl bg-slate-900 border border-amber-500/40 text-amber-300 font-bold text-xs hover:bg-slate-800 active:scale-95 transition flex items-center justify-center gap-2"
+          >
+            <MessageSquare className="w-4 h-4 text-amber-400" />
+            <span>ห้องแชทสาธารณะ & ข้อเสนอแนะ (ไม่ต้องล็อกอิน)</span>
           </button>
         </div>
 
