@@ -723,7 +723,7 @@ export default function PeanutsMain({ session }: { session: any }) {
 
                           {/* Bio */}
                           <p className="text-xs text-slate-300 line-clamp-2 pt-1 font-sans">
-                            {profiles[currentIndex].bio || 'หมูหยอง'}
+                            {profiles[currentIndex].bio || ''}
                           </p>
                         </div>
                       </div>
