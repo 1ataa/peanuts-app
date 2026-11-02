@@ -63,4 +63,124 @@ export default function AuthOTP({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-slate-900 font-sans p-0 sm:p-4 text-slate-100">
-      <div className="w-full max-w-md h-[100vh] sm:h-[880px] bg-slate-950 sm:rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden border border-slate-8
+      <div className="w-full max-w-md h-[100vh] sm:h-[880px] bg-slate-950 sm:rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden border border-slate-800 relative p-6">
+        
+        {/* Header */}
+        <div>
+          {onBack && (
+            <button 
+              onClick={onBack}
+              className="mb-2 text-xs text-slate-400 hover:text-white flex items-center gap-1 transition"
+            >
+              <ArrowLeft className="w-4 h-4" /> ย้อนกลับหน้าแนะนำ
+            </button>
+          )}
+
+          <div className="text-center pt-8 pb-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-orange-500/20 mx-auto mb-3">
+              <Flame className="w-8 h-8 text-white fill-white" />
+            </div>
+            <h1 className="text-2xl font-black bg-gradient-to-r from-amber-400 via-orange-300 to-emerald-400 bg-clip-text text-transparent">
+              Peanuts KU KPS
+            </h1>
+            <p className="text-xs text-slate-400 mt-1 flex items-center justify-center gap-1 font-medium">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> ยืนยันตัวตนด้วยอีเมลนิสิต @ku.th
+            </p>
+          </div>
+        </div>
+
+        {/* Toast Notification */}
+        {toast && (
+          <div className={`p-3 rounded-xl text-xs text-center font-medium border transition-all ${
+            toast.type === 'error' 
+              ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' 
+              : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
+          }`}>
+            {toast.msg}
+          </div>
+        )}
+
+        {/* Form Container */}
+        <div className="flex-1 flex flex-col justify-center my-4">
+          {step === 'email' ? (
+            <form onSubmit={handleSendOtp} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="text-xs text-slate-400 font-medium block">
+                  กรอกอีเมลมหาลัย (@ku.th)
+                </label>
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-500" />
+                  <input
+                    type="email"
+                    required
+                    placeholder="example@ku.th"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-xs text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs rounded-xl hover:opacity-90 active:scale-95 transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/15 disabled:opacity-50"
+              >
+                <span>{loading ? 'กำลังส่งรหัส...' : 'ส่งรหัส OTP เข้าอีเมล'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyOtp} className="space-y-4">
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs text-slate-400 font-medium">
+                    กรอกรหัส OTP 8 หลัก
+                  </label>
+                  <span className="text-[10px] text-emerald-400 font-mono truncate max-w-[180px]">
+                    {email}
+                  </span>
+                </div>
+                <div className="relative">
+                  <KeyRound className="absolute left-3.5 top-3.5 w-4 h-4 text-slate-500" />
+                  <input
+                    type="text"
+                    required
+                    maxLength={8}
+                    placeholder="12345678"
+                    value={otp}
+                    onChange={(e) => setOtp(e.target.value)}
+                    className="w-full pl-10 pr-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-white text-center font-mono tracking-[0.3em] text-base focus:outline-none focus:border-emerald-500 transition"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs rounded-xl hover:opacity-90 active:scale-95 transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/15 disabled:opacity-50"
+              >
+                <span>{loading ? 'กำลังตรวจสอบ...' : 'ยืนยันรหัส OTP'}</span>
+                <ArrowRight className="w-4 h-4" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setStep('email')}
+                className="w-full text-center text-xs text-slate-400 hover:text-white transition py-1"
+              >
+                ย้อนกลับไปเปลี่ยนอีเมล
+              </button>
+            </form>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="text-center text-[11px] text-slate-500 pb-2">
+          เฉพาะนิสิต ม.เกษตรศาสตร์ กำแพงแสน เท่านั้น
+        </div>
+
+      </div>
+    </div>
+  );
+}
