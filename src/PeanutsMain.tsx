@@ -113,7 +113,7 @@ const MOCK_MATCHES = [
   }
 ];
 
-export default function PeanutsKPSApp() {
+export default function PeanutsMain({ session }: { session?: any }) {
   const [activeTab, setActiveTab] = useState<'discover' | 'matches' | 'profile'>('discover');
   
   // Discover State
