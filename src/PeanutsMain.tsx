@@ -146,7 +146,84 @@ export default function PeanutsMain({ session }: { session?: any }) {
       'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?auto=format&fit=crop&q=80&w=800'
     ]
   });
+// --- ดึงข้อมูลโปรไฟล์จาก Supabase เมื่อเปิดหน้า ---
+  useEffect(() => {
+    if (session?.user) {
+      fetchProfile();
+    }
+  }, [session]);
 
+  const fetchProfile = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
+
+    if (data) {
+      setMyProfile({
+        name: data.full_name || 'นิสิต KU KPS',
+        faculty: data.faculty || 'คณะเกษตร กำแพงแสน',
+        year: data.year || 'ชั้นปีที่ 1',
+        studentId: data.student_id || session.user.email?.split('@')[0] || '',
+        email: session.user.email || '',
+        bio: data.bio || '',
+        tags: data.tags || [],
+        photos: data.photos && data.photos.length > 0 ? data.photos : myProfile.photos
+      });
+    }
+  };
+
+  // --- ฟังก์ชันบันทึกข้อมูลส่วนตัวลง Supabase Database ---
+  const handleSaveProfile = async () => {
+    if (!session?.user) return;
+    const { error } = await supabase.from('profiles').upsert({
+      id: session.user.id,
+      full_name: myProfile.name,
+      faculty: myProfile.faculty,
+      year: myProfile.year,
+      student_id: myProfile.studentId,
+      bio: myProfile.bio,
+      tags: myProfile.tags,
+      photos: myProfile.photos,
+      updated_at: new Date().toISOString()
+    });
+
+    if (error) {
+      alert('บันทึกไม่สำเร็จ: ' + error.message);
+    } else {
+      alert('บันทึกข้อมูลเรียบร้อยแล้ว! ✨');
+    }
+  };
+
+  // --- ฟังก์ชันอัปโหลดรูปภาพขึ้น Supabase Storage (Bucket: avatars) ---
+  const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !session?.user) return;
+
+    const fileExt = file.name.split('.').pop();
+    const filePath = `${session.user.id}/${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(filePath, file, { upsert: true });
+
+    if (uploadError) {
+      alert('อัปโหลดรูปภาพไม่สำเร็จ: ' + uploadError.message + '\n(อย่าลืมสร้าง Public Bucket ชื่อ avatars ใน Supabase)');
+      return;
+    }
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+    const newPhotos = [...myProfile.photos, data.publicUrl];
+
+    setMyProfile((prev) => ({ ...prev, photos: newPhotos }));
+
+    await supabase.from('profiles').upsert({
+      id: session.user.id,
+      photos: newPhotos,
+      updated_at: new Date().toISOString()
+    });
+  };
   const currentProfile = profiles[currentIndex];
 
   // Action Handlers
