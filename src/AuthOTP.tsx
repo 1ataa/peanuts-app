@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Mail, KeyRound, ArrowRight, ShieldCheck, Flame, ArrowLeft, Camera, AlertTriangle } from 'lucide-react';
+import { Mail, KeyRound, ArrowRight, ShieldCheck, Flame, ArrowLeft, Camera, AlertTriangle, Info } from 'lucide-react';
 
 const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_pEF2JfLNNVNSqP2EkWfLQA_07HIg3xu';
@@ -119,7 +119,7 @@ export default function AuthOTP({ onBack }: { onBack?: () => void }) {
         {/* Form Container */}
         <div className="flex-1 flex flex-col justify-center my-2">
           {step === 'email' ? (
-            <form onSubmit={handleSendOtp} className="space-y-4">
+            <form onSubmit={handleSendOtp} className="space-y-3">
               <div className="space-y-1.5">
                 <label className="text-xs text-slate-400 font-medium block">
                   กรอกอีเมลมหาลัย (@ku.th)
@@ -145,9 +145,17 @@ export default function AuthOTP({ onBack }: { onBack?: () => void }) {
                 <span>{loading ? 'กำลังส่งรหัส...' : 'ส่งรหัส OTP เข้าอีเมล'}</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+
+              {/* SPAM / JUNK NOTICE */}
+              <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 text-[11px] text-slate-400 flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  หากไม่พบรหัส OTP ในกล่องข้อความหลัก กรุณาตรวจสอบใน <span className="text-amber-300 font-medium">โฟลเดอร์ขยะ (Junk / Spam)</span> ของอีเมลมหาลัย
+                </p>
+              </div>
             </form>
           ) : (
-            <form onSubmit={handleVerifyOtp} className="space-y-4">
+            <form onSubmit={handleVerifyOtp} className="space-y-3">
               <div className="space-y-1.5">
                 <div className="flex justify-between items-center">
                   <label className="text-xs text-slate-400 font-medium">
@@ -187,6 +195,14 @@ export default function AuthOTP({ onBack }: { onBack?: () => void }) {
               >
                 ย้อนกลับไปเปลี่ยนอีเมล
               </button>
+
+              {/* SPAM / JUNK NOTICE */}
+              <div className="p-3 rounded-xl bg-slate-900/60 border border-slate-800/80 text-[11px] text-slate-400 flex items-start gap-2">
+                <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                <p className="leading-relaxed">
+                  หากไม่ได้รับรหัส OTP กรุณาตรวจสอบใน <span className="text-amber-300 font-medium">โฟลเดอร์ขยะ (Junk / Spam)</span> หรือกดย้อนกลับเพื่อลองใหม่อีกครั้ง
+                </p>
+              </div>
             </form>
           )}
         </div>
