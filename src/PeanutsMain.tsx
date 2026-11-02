@@ -702,9 +702,14 @@ export default function PeanutsKPSApp() {
                   <span className="flex items-center gap-2"><Settings className="w-4 h-4 text-slate-400" /> ตั้งค่าการค้นหาและแมตช์</span>
                   <ChevronRight className="w-4 h-4 text-slate-500" />
                 </button>
-                <button className="w-full py-2.5 px-3 rounded-xl hover:bg-rose-500/10 text-rose-400 text-xs font-medium flex items-center gap-2 transition">
-                  <LogOut className="w-4 h-4" /> ออกจากระบบ
-                </button>
+               <button 
+  onClick={async () => {
+    await supabase.auth.signOut();
+  }}
+  className="w-full py-2.5 px-3 rounded-xl hover:bg-rose-500/10 text-rose-400 text-xs font-medium flex items-center gap-2 transition"
+>
+  <LogOut className="w-4 h-4" /> ออกจากระบบ
+</button>
               </div>
 
             </div>
