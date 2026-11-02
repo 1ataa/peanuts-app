@@ -774,10 +774,12 @@ export default function PeanutsMain({ session }: { session?: any }) {
                   </div>
                 </div>
 
-                <button className="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs hover:opacity-90 transition">
-                  บันทึกการเปลี่ยนแปลง
-                </button>
-              </div>
+<button 
+  onClick={handleSaveProfile}
+  className="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs hover:opacity-90 transition active:scale-95"
+>
+  บันทึกการเปลี่ยนแปลง
+</button>
 
               {/* Settings / Logout */}
               <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 flex flex-col gap-2">
