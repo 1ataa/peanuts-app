@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { Mail, KeyRound, ArrowRight, ShieldCheck, Flame, ArrowLeft } from 'lucide-react';
+import { Mail, KeyRound, ArrowRight, ShieldCheck, Flame, ArrowLeft, Camera, AlertTriangle } from 'lucide-react';
 
 const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_pEF2JfLNNVNSqP2EkWfLQA_07HIg3xu';
@@ -63,7 +63,7 @@ export default function AuthOTP({ onBack }: { onBack?: () => void }) {
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-slate-900 font-sans p-0 sm:p-4 text-slate-100">
-      <div className="w-full max-w-md h-[100vh] sm:h-[880px] bg-slate-950 sm:rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden border border-slate-800 relative p-6">
+      <div className="w-full max-w-md h-[100vh] sm:h-[880px] bg-slate-950 sm:rounded-3xl shadow-2xl flex flex-col justify-between overflow-y-auto border border-slate-800 relative p-6">
         
         {/* Header */}
         <div>
@@ -76,7 +76,7 @@ export default function AuthOTP({ onBack }: { onBack?: () => void }) {
             </button>
           )}
 
-          <div className="text-center pt-8 pb-4">
+          <div className="text-center pt-4 pb-2">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-amber-500 via-orange-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-orange-500/20 mx-auto mb-3">
               <Flame className="w-8 h-8 text-white fill-white" />
             </div>
@@ -91,7 +91,7 @@ export default function AuthOTP({ onBack }: { onBack?: () => void }) {
 
         {/* Toast Notification */}
         {toast && (
-          <div className={`p-3 rounded-xl text-xs text-center font-medium border transition-all ${
+          <div className={`p-3 rounded-xl text-xs text-center font-medium border transition-all my-2 ${
             toast.type === 'error' 
               ? 'bg-rose-500/10 border-rose-500/30 text-rose-300' 
               : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
@@ -100,8 +100,24 @@ export default function AuthOTP({ onBack }: { onBack?: () => void }) {
           </div>
         )}
 
+        {/* GUIDELINE BOX / ข้อแนะนำเรื่องรูปภาพ */}
+        <div className="my-2 p-3.5 rounded-2xl bg-slate-900/90 border border-amber-500/30 text-xs leading-relaxed space-y-1.5">
+          <div className="font-bold text-amber-400 flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+            <Camera className="w-4 h-4 text-amber-400" /> ข้อกำหนดเกี่ยวกับรูปภาพโปรไฟล์
+          </div>
+          <p className="text-slate-300 text-[11px]">
+            • สามารถใช้รูปโชว์หุ่น รูปร่าง หรือแนวเซ็กซี่ที่ดูดีได้ตามความเหมาะสม
+          </p>
+          <p className="text-rose-300 font-medium text-[11px]">
+            • <span className="underline font-bold">ไม่อนุญาต</span> รูปภาพเปลือย อวัยวะเพศ หรือภาพล่อแหลมอนาจารจนเกินไป
+          </p>
+          <div className="pt-1 text-[10px] text-rose-400 font-semibold flex items-center gap-1 border-t border-slate-800/80">
+            <AlertTriangle className="w-3.5 h-3.5 shrink-0 text-rose-400" /> หากพบการฝ่าฝืน ระงับบัญชี (Ban) ถาวรทุกกรณีทันที
+          </div>
+        </div>
+
         {/* Form Container */}
-        <div className="flex-1 flex flex-col justify-center my-4">
+        <div className="flex-1 flex flex-col justify-center my-2">
           {step === 'email' ? (
             <form onSubmit={handleSendOtp} className="space-y-4">
               <div className="space-y-1.5">
