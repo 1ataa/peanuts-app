@@ -166,7 +166,19 @@ export default function PeanutsMain({ session }: { session?: any }) {
       alert('อัปโหลดรูปภาพไม่สำเร็จ: ' + uploadError.message);
       return;
     }
+// --- ฟังก์ชันลบรูปภาพโปรไฟล์ ---
+  const handleDeletePhoto = async (indexToDelete: number) => {
+    const updatedPhotos = myProfile.photos.filter((_, idx) => idx !== indexToDelete);
+    setMyProfile((prev) => ({ ...prev, photos: updatedPhotos }));
 
+    if (session?.user) {
+      await supabase.from('profiles').upsert({
+        id: session.user.id,
+        photos: updatedPhotos,
+        updated_at: new Date().toISOString()
+      });
+    }
+  };
     const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
     const newPhotos = [...myProfile.photos, data.publicUrl];
 
@@ -456,10 +468,23 @@ export default function PeanutsMain({ session }: { session?: any }) {
                   <Image className="w-4 h-4 text-emerald-400" /> รูปโปรไฟล์ของคุณ (สูงสุด 6 รูป)
                 </h3>
 
-                <div className="grid grid-cols-3 gap-2">
+               <div className="grid grid-cols-3 gap-2">
                   {myProfile.photos.map((url, idx) => (
-                    <div key={idx} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-slate-700">
+                    <div key={idx} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-slate-700 group">
                       <img src={url} alt="profile" className="w-full h-full object-cover" />
+                      {idx === 0 && (
+                        <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-500 text-[8px] font-bold text-slate-950">
+                          หลัก
+                        </span>
+                      )}
+                      <button 
+                        type="button"
+                        onClick={() => handleDeletePhoto(idx)}
+                        className="absolute top-1 right-1 p-1 rounded-full bg-slate-950/80 text-rose-400 hover:bg-rose-500 hover:text-white transition"
+                        title="ลบรูปนี้"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </div>
                   ))}
 
