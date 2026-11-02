@@ -77,19 +77,22 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
     });
   };
 
-  // --- ตรวจสอบประเภทไฟล์เสียงที่อุปกรณ์นั้นๆ รองรับ (รองรับทั้ง iOS & Android) ---
-  const getSupportedMimeType = () => {
-    if (MediaRecorder.isTypeSupported('audio/mp4')) return 'audio/mp4';
-    if (MediaRecorder.isTypeSupported('audio/aac')) return 'audio/aac';
-    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) return 'audio/webm;codecs=opus';
-    if (MediaRecorder.isTypeSupported('audio/webm')) return 'audio/webm';
-    return '';
+  // --- ฟังก์ชันตรวจจับการอัดเสียงที่รองรับ iOS Safari โดยเฉพาะ ---
+  const getAudioConfig = () => {
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isIOS || MediaRecorder.isTypeSupported('audio/mp4')) {
+      return { mimeType: 'audio/mp4', ext: 'mp4', contentType: 'audio/mp4' };
+    }
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      return { mimeType: 'audio/webm;codecs=opus', ext: 'webm', contentType: 'audio/webm' };
+    }
+    return { mimeType: 'audio/webm', ext: 'webm', contentType: 'audio/webm' };
   };
 
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const mimeType = getSupportedMimeType();
+      const { mimeType } = getAudioConfig();
       const options = mimeType ? { mimeType } : undefined;
       
       const mediaRecorder = new MediaRecorder(stream, options);
@@ -103,10 +106,11 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
       };
 
       mediaRecorder.onstop = async () => {
-        const recordedType = mediaRecorder.mimeType || mimeType || 'audio/mp4';
+        const { mimeType: configMime, ext, contentType } = getAudioConfig();
+        const recordedType = mediaRecorder.mimeType || configMime;
         const audioBlob = new Blob(audioChunksRef.current, { type: recordedType });
         stream.getTracks().forEach((track) => track.stop());
-        await uploadAndSendAudio(audioBlob, recordedType);
+        await uploadAndSendAudio(audioBlob, ext, contentType);
       };
 
       mediaRecorder.start();
@@ -123,14 +127,16 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
     }
   };
 
-  const uploadAndSendAudio = async (blob: Blob, mimeType: string) => {
+  const uploadAndSendAudio = async (blob: Blob, ext: string, contentType: string) => {
     setUploadingAudio(true);
-    const ext = mimeType.includes('mp4') || mimeType.includes('aac') ? 'm4a' : 'webm';
     const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 7)}.${ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from('audio-messages')
-      .upload(fileName, blob, { contentType: mimeType });
+      .upload(fileName, blob, { 
+        contentType: contentType,
+        upsert: true
+      });
 
     if (uploadError) {
       alert('ส่งข้อความเสียงไม่สำเร็จ: ' + uploadError.message);
@@ -236,7 +242,13 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
                 </span>
                 
                 {isVoice ? (
-                  <audio controls src={audioUrl} className="h-8 max-w-[210px] my-0.5" />
+                  <audio 
+                    controls 
+                    preload="metadata" 
+                    playsInline 
+                    src={audioUrl} 
+                    className="h-8 max-w-[210px] my-0.5" 
+                  />
                 ) : (
                   <span className="text-slate-200 break-all">{m.content}</span>
                 )}
