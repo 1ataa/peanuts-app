@@ -361,18 +361,40 @@ export default function PeanutsMain({ session }: { session: any }) {
 
     setUploadingAudio(false);
   };
+// 1. ฟังก์ชันแปลงรูปภาพเป็น JPEG
+  const convertToJpeg = (file: File): Promise<Blob> => {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = img.width;
+          canvas.height = img.height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0);
+          canvas.toBlob((blob) => {
+            resolve(blob || file);
+          }, 'image/jpeg', 0.85);
+        };
+        img.src = event.target?.result as string;
+      };
+      reader.readAsDataURL(file);
+    });
+  };
 
+  // 2. ฟังก์ชัน handlePhotoUpload ใหม่
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, slotIndex: number) => {
     if (!e.target.files || e.target.files.length === 0) return;
-    const file = e.target.files[0];
+    const originalFile = e.target.files[0];
     setUploadingSlot(slotIndex);
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${session.user.id}_slot${slotIndex}_${Date.now()}.${fileExt}`;
+    const imageBlob = await convertToJpeg(originalFile);
+    const fileName = `${session.user.id}_slot${slotIndex}_${Date.now()}.jpg`;
 
     const { error: uploadError } = await supabase.storage
       .from('avatars')
-      .upload(fileName, file, { upsert: true });
+      .upload(fileName, imageBlob, { contentType: 'image/jpeg', upsert: true });
 
     if (uploadError) {
       alert('อัปโหลดรูปไม่สำเร็จ: ' + uploadError.message);
@@ -386,7 +408,6 @@ export default function PeanutsMain({ session }: { session: any }) {
     setPhotos(newPhotos);
     setUploadingSlot(null);
   };
-
   const handleRemovePhoto = (slotIndex: number) => {
     const newPhotos = [...photos];
     newPhotos[slotIndex] = '';
