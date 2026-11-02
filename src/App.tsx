@@ -1,24 +1,24 @@
 import React, { useState, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import PeanutsLanding from './PeanutsLanding';
 import AuthOTP from './AuthOTP';
 import PeanutsMain from './PeanutsMain';
 
 const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_pEF2JfLNNVNSqP2EkWfLQA_07HIg3xu';
-const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [hasStarted, setHasStarted] = useState(false); // ควบคุมการแสดงหน้า Landing
 
   useEffect(() => {
-    // ดึงสถานะการเข้าสู่ระบบปัจจุบัน
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
     });
 
-    // ตรวจจับเมื่อมีการล็อกอิน/ล็อกเอาท์
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setSession(session);
       setLoading(false);
@@ -29,17 +29,22 @@ export default function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white text-xs">
-        กำลังโหลดระบบ Peanuts...
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center text-slate-400 text-xs">
+        กำลังโหลด...
       </div>
     );
   }
 
-  // ยังไม่ล็อกอิน -> แสดงหน้า OTP
-  if (!session) {
-    return <AuthOTP />;
+  // 1. ถ้าล็อกอินอยู่แล้ว ให้เข้าหน้าแอปหลักทันที
+  if (session) {
+    return <PeanutsMain session={session} />;
   }
 
-  // ล็อกอินแล้ว -> แสดงหน้าจับคู่ PeanutsMain
-  return <PeanutsMain session={session} />;
+  // 2. ถ้ายังไม่ได้กดเริ่มใช้งานจากหน้า Landing ให้แสดงหน้า Landing Page ก่อน
+  if (!hasStarted) {
+    return <PeanutsLanding onStart={() => setHasStarted(true)} />;
+  }
+
+  // 3. เมื่อกดปุ่มยอมรับเงื่อนไข ให้ไปหน้าใส่กรอกอีเมล OTP
+  return <AuthOTP />;
 }
