@@ -12,113 +12,57 @@ const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_pEF2JfLNNVNSqP2EkWfLQA_07HIg3xu';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// รายชื่อคณะใน ม.เกษตรศาสตร์ วิทยาเขตกำแพงแสน
 const KU_FACULTIES = [
   'คณะเกษตร กำแพงแสน',
   'คณะวิศวกรรมศาสตร์ กำแพงแสน',
   'คณะวิทยาศาสตร์การกีฬา',
-  'คณะศึกษาศาสตร์และพัฒนศาสตร์',
+  'คณะศึกษาศาสตร์และวิทยาศาสตร์',
   'คณะศิลปศาสตร์และวิทยาศาสตร์',
   'คณะอุตสาหกรรมบริการ',
-  'คณะประมง กำแพงแสน',
+  'คณะประมง (กำแพงแสน)',
   'คณะสัตวแพทยศาสตร์ (กำแพงแสน)'
 ];
 
 const YEARS = ['ชั้นปีที่ 1', 'ชั้นปีที่ 2', 'ชั้นปีที่ 3', 'ชั้นปีที่ 4', 'บัณฑิตศึกษา (ป.โท/เอก)'];
 const GENDERS = ['ชาย', 'หญิง', 'LGBTQ+ / ไม่จำกัดเพศ', 'ไม่ระบุ'];
 
-// --- Mock Data for Discover Cards ---
-const MOCK_PROFILES = [
-  {
-    id: '1',
-    name: 'น้องแพรว',
-    age: 20,
-    studentId: '66xxxxx',
-    faculty: 'คณะเกษตร กำแพงแสน',
-    year: 'ชั้นปีที่ 2',
-    gender: 'หญิง',
-    verified: true,
-    bio: 'สายคาเฟ่ ชอบถ่ายรูป ชอบเดินเล่นแปลงเกษตรตอนเย็น 🌾 หาเพื่อนกินชาบูหน้า ม.',
-    photos: [
-      'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=800',
-      'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&q=80&w=800'
-    ],
-    tags: ['#ถ่ายรูป', '#ชาบูหน้าม', '#เดินเล่นแปลงวิจัย', '#CatLover', '#Valorant'],
-    prompts: [
-      { q: 'ร้านโปรดหน้า ม. ที่ต้องไปประจำ', a: 'ก๋วยเตี๋ยวเรือข้าง ม. กับ ร้านนมปังเย็น' }
-    ]
-  },
-  {
-    id: '2',
-    name: 'พี่ภีม',
-    age: 21,
-    studentId: '65xxxxx',
-    faculty: 'คณะวิศวกรรมศาสตร์ กำแพงแสน',
-    year: 'ชั้นปีที่ 3',
-    gender: 'ชาย',
-    verified: true,
-    bio: 'เด็กวิศวะเครื่องกล ชอบตีแบตกับเล่นเกมดึกๆ 🏸🎮 หาคนไปวิ่งสระน้ำมหาลัยด้วยกันครับ',
-    photos: [
-      'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&q=80&w=800'
-    ],
-    tags: ['#วิศวะเครื่องกล', '#ตีแบต', '#วิ่งสระน้ำ', '#บอร์ดเกม'],
-    prompts: [
-      { q: 'ข้อดีของการมีฉันเป็นคู่ Match', a: 'พาไปกินของอร่อยยามดึกได้เสมอ' }
-    ]
-  }
-];
-
-const MOCK_MATCHES = [
-  {
-    id: 'm1',
-    name: 'น้องแพรว',
-    faculty: 'คณะเกษตร',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200',
-    lastMessage: 'ตอนเย็นไปกินชาบูตรงข้าม ม. กันมั้ยคะ? 🍲',
-    time: '18:32',
-    unread: true,
-    online: true
-  }
-];
-
 export default function PeanutsMain({ session }: { session?: any }) {
   const [activeTab, setActiveTab] = useState<'discover' | 'matches' | 'profile'>('discover');
   
   // Discover State
-  const [profiles, setProfiles] = useState(MOCK_PROFILES);
+  const [profiles, setProfiles] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [photoIndex, setPhotoIndex] = useState(0);
   const [lastAction, setLastAction] = useState<string | null>(null);
   const [matchedUser, setMatchedUser] = useState<any | null>(null);
 
+  // Real Matches State
+  const [realMatches, setRealMatches] = useState<any[]>([]);
+
   // Chat State
   const [activeChat, setActiveChat] = useState<any | null>(null);
-  const [messages, setMessages] = useState<Array<{ id: string; sender: 'me' | 'them'; text: string; time: string }>>([
-    { id: '1', sender: 'them', text: 'สวัสดีค่าา นิสิต KU KPS เหมือนกันเลย 😊', time: '18:30' },
-    { id: '2', sender: 'me', text: 'หวัดดีครับ! คณะเกษตรใช่ไหมครับ', time: '18:31' }
-  ]);
+  const [messages, setMessages] = useState<Array<{ id: string; sender: 'me' | 'them'; text: string; time: string }>>([]);
   const [inputMsg, setInputMsg] = useState('');
 
-  // User Profile Settings State
+  // User Profile State
   const [myProfile, setMyProfile] = useState({
-    name: 'Unknown',
-    faculty: 'Unknown',
-    year: 'Unknown',
-    gender: 'Unknown',
-    studentId: 'Unknown',
-    email: session?.user?.email || 'Unknown',
-    bio: 'Unknown',
-    tags: ['Unknown'],
-    photos: [
-      'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800'
-    ]
+    name: 'นิสิต KU KPS',
+    faculty: 'คณะเกษตร กำแพงแสน',
+    year: 'ชั้นปีที่ 1',
+    gender: 'ชาย',
+    studentId: '',
+    email: session?.user?.email || '',
+    bio: '',
+    tags: ['#เกษตรKPS'],
+    photos: ['https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800']
   });
 
-  // --- 1. ดึงข้อมูลโปรไฟล์จาก Supabase Database ---
+  // --- โหลดข้อมูลโปรไฟล์ & การ์ดค้นหา & รายการ Match จริง ---
   useEffect(() => {
     if (session?.user) {
       fetchProfile();
       fetchDiscoverProfiles();
+      fetchRealMatches();
     }
   }, [session]);
 
@@ -147,19 +91,31 @@ export default function PeanutsMain({ session }: { session?: any }) {
       console.log('Error fetching profile:', e);
     }
   };
-// --- ฟังก์ชันดึงนิสิตคนอื่นที่เซฟโปรไฟล์เรียบร้อยแล้ว มาแสดงในการ์ดจับคู่ ---
+
+  // ดึงการ์ดคนอื่นที่กดบันทึกโปรไฟล์แล้ว และเรายังไม่ได้เคยปัด
   const fetchDiscoverProfiles = async () => {
     if (!session?.user) return;
 
     try {
-      const { data, error } = await supabase
+      // ดึงรายชื่อที่เราเคยปัดไปแล้ว
+      const { data: swiped } = await supabase
+        .from('likes')
+        .select('to_user_id')
+        .eq('from_user_id', session.user.id);
+
+      const swipedIds = swiped ? swiped.map((s) => s.to_user_id) : [];
+
+      const { data } = await supabase
         .from('profiles')
         .select('*')
-        .neq('id', session.user.id) // ไม่ดึงโปรไฟล์ตัวเอง
-        .not('full_name', 'is', null); // ดึงเฉพาะคนที่กดบันทึกโปรไฟล์แล้ว
+        .neq('id', session.user.id)
+        .not('full_name', 'is', null);
 
-      if (data && data.length > 0) {
-        const realProfiles = data.map((p) => ({
+      if (data) {
+        // กรองเอาเฉพาะคนที่ยังไม่ได้ปัด
+        const filtered = data.filter((p) => !swipedIds.includes(p.id));
+
+        const realProfiles = filtered.map((p) => ({
           id: p.id,
           name: p.full_name || 'นิสิต KU KPS',
           age: 20,
@@ -172,19 +128,100 @@ export default function PeanutsMain({ session }: { session?: any }) {
           photos: p.photos && p.photos.length > 0 
             ? p.photos 
             : ['https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800'],
-          tags: p.tags && p.tags.length > 0 ? p.tags : ['#KUKPS', '#นิสิตเกษตร'],
-          prompts: p.prompts || []
+          tags: p.tags && p.tags.length > 0 ? p.tags : ['#KUKPS', '#นิสิตเกษตร']
         }));
-        
+
         setProfiles(realProfiles);
-      } else {
-        setProfiles([]);
+        setCurrentIndex(0);
       }
     } catch (e) {
       console.log('Error fetching discover profiles:', e);
     }
   };
-  // --- 2. บันทึกข้อมูลส่วนตัวลง Supabase ---
+
+  // ดึงรายการคนที่แมตช์กันจริงๆ จากตาราง matches
+  const fetchRealMatches = async () => {
+    if (!session?.user) return;
+    try {
+      const { data: matchesData } = await supabase
+        .from('matches')
+        .select('*')
+        .or(`user_1.eq.${session.user.id},user_2.eq.${session.user.id}`);
+
+      if (matchesData && matchesData.length > 0) {
+        const partnerIds = matchesData.map((m) =>
+          m.user_1 === session.user.id ? m.user_2 : m.user_1
+        );
+
+        const { data: partnersProfile } = await supabase
+          .from('profiles')
+          .select('*')
+          .in('id', partnerIds);
+
+        if (partnersProfile) {
+          const list = partnersProfile.map((p) => ({
+            id: p.id,
+            name: p.full_name || 'นิสิต KU KPS',
+            faculty: p.faculty || 'ม.เกษตร',
+            avatar: p.photos && p.photos.length > 0 ? p.photos[0] : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800',
+            lastMessage: 'เริ่มส่งข้อความทักทายเลย! 👋',
+            time: 'ตอนนี้'
+          }));
+          setRealMatches(list);
+        }
+      } else {
+        setRealMatches([]);
+      }
+    } catch (e) {
+      console.log('Error fetching matches:', e);
+    }
+  };
+
+  // --- ระบบสไวป์และการเช็ค Match สองฝ่าย ---
+  const handleSwipe = async (direction: 'pass' | 'like' | 'superlike') => {
+    if (!currentProfile || !session?.user) return;
+    setLastAction(direction);
+    setPhotoIndex(0);
+
+    const myId = session.user.id;
+    const targetId = currentProfile.id;
+
+    // 1. บันทึกการปัดลงตาราง likes
+    await supabase.from('likes').upsert({
+      from_user_id: myId,
+      to_user_id: targetId,
+      action: direction
+    });
+
+    // 2. ถ้าปัด Like / Superlike ให้เช็คว่าอีกฝ่ายเคยปัด Like เราไหม
+    if (direction === 'like' || direction === 'superlike') {
+      const { data: mutualLike } = await supabase
+        .from('likes')
+        .select('*')
+        .eq('from_user_id', targetId)
+        .eq('to_user_id', myId)
+        .in('action', ['like', 'superlike'])
+        .maybeSingle();
+
+      if (mutualLike) {
+        // อีกฝ่ายเคย Like เราไว้จริง -> บันทึกลงตาราง matches และแสดง Match Modal
+        await supabase.from('matches').insert({
+          user_1: myId,
+          user_2: targetId
+        });
+
+        setMatchedUser(currentProfile);
+        fetchRealMatches(); // รีเฟรชหน้ารายชื่อแชททันที
+      }
+    }
+
+    setTimeout(() => {
+      setCurrentIndex((prev) => prev + 1);
+      setLastAction(null);
+    }, 250);
+  };
+
+  // --- บันทึกโปรไฟล์ ---
   const handleSaveProfile = async () => {
     if (!session?.user) return;
     const { error } = await supabase.from('profiles').upsert({
@@ -204,11 +241,11 @@ export default function PeanutsMain({ session }: { session?: any }) {
       alert('บันทึกไม่สำเร็จ: ' + error.message);
     } else {
       alert('บันทึกข้อมูลเรียบร้อยแล้ว! ✨');
-      fetchDiscoverProfiles()
+      fetchDiscoverProfiles();
     }
   };
 
-  // --- 3. อัปโหลดรูปภาพขึ้น Supabase Storage ---
+  // --- อัปโหลดรูปภาพ ---
   const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !session?.user) return;
@@ -237,7 +274,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
     });
   };
 
-  // --- 4. ลบรูปภาพโปรไฟล์ ---
+  // --- ลบรูปภาพ ---
   const handleDeletePhoto = async (indexToDelete: number) => {
     const updatedPhotos = myProfile.photos.filter((_, idx) => idx !== indexToDelete);
     setMyProfile((prev) => ({ ...prev, photos: updatedPhotos }));
@@ -261,30 +298,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
   const handlePrevPhoto = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (photoIndex > 0) setPhotoIndex(photoIndex - 1);
-  };
-
-  const handleSwipe = (direction: 'pass' | 'like' | 'superlike') => {
-    if (!currentProfile) return;
-    setLastAction(direction);
-    setPhotoIndex(0);
-
-    if (direction === 'like' || direction === 'superlike') {
-      if (Math.random() > 0.3 || direction === 'superlike') {
-        setMatchedUser(currentProfile);
-      }
-    }
-
-    setTimeout(() => {
-      setCurrentIndex((prev) => prev + 1);
-      setLastAction(null);
-    }, 250);
-  };
-
-  const handleUndo = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex((prev) => prev - 1);
-      setPhotoIndex(0);
-    }
   };
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -372,7 +385,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
                       </div>
 
                       <div className="absolute top-3 inset-x-4 flex gap-1.5 z-20">
-                        {currentProfile.photos.map((_, i) => (
+                        {currentProfile.photos.map((_: any, i: number) => (
                           <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i === photoIndex ? 'bg-white shadow-md' : 'bg-white/30'}`} />
                         ))}
                       </div>
@@ -389,7 +402,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
                         <div>
                           <div className="flex items-baseline gap-2">
                             <h2 className="text-2xl font-black text-white tracking-tight">{currentProfile.name}</h2>
-                            <span className="text-xl font-medium text-slate-300">{currentProfile.age}</span>
+                            <span className="text-sm font-medium text-amber-400">({currentProfile.gender})</span>
                           </div>
                           <div className="flex items-center gap-2 text-xs font-medium text-emerald-300 mt-1">
                             <GraduationCap className="w-4 h-4 text-emerald-400" />
@@ -400,7 +413,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
                         <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">{currentProfile.bio}</p>
 
                         <div className="flex flex-wrap gap-1.5 pt-1">
-                          {currentProfile.tags.map((tag, idx) => (
+                          {currentProfile.tags.map((tag: string, idx: number) => (
                             <span key={idx} className="px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-[11px] text-amber-300 font-medium">
                               {tag}
                             </span>
@@ -413,7 +426,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
 
                   {/* BUTTONS */}
                   <div className="pt-4 pb-2 flex justify-center items-center gap-4 z-30">
-                    <button onClick={handleUndo} disabled={currentIndex === 0} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-amber-400 flex items-center justify-center hover:scale-110 active:scale-95 disabled:opacity-30">
+                    <button onClick={() => { setCurrentIndex(0); setPhotoIndex(0); }} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-amber-400 flex items-center justify-center hover:scale-110 active:scale-95">
                       <RotateCcw className="w-5 h-5" />
                     </button>
                     <button onClick={() => handleSwipe('pass')} className="w-14 h-14 rounded-full bg-slate-900 border border-rose-500/30 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white hover:scale-110 active:scale-95">
@@ -431,9 +444,10 @@ export default function PeanutsMain({ session }: { session?: any }) {
               ) : (
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-6 bg-slate-900/50 rounded-3xl border border-slate-800">
                   <Sparkles className="w-8 h-8 text-amber-400 mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">หมดการ์ดโปรไฟล์แล้ว!</h3>
-                  <button onClick={() => { setCurrentIndex(0); setPhotoIndex(0); }} className="mt-4 px-6 py-2.5 rounded-full bg-emerald-500 text-slate-950 font-bold text-xs">
-                    เริ่มใหม่อีกครั้ง
+                  <h3 className="text-xl font-bold text-white mb-2">ยังไม่มีโปรไฟล์ใหม่ในขณะนี้</h3>
+                  <p className="text-xs text-slate-400">เมื่อมีเพื่อนนิสิตกดบันทึกโปรไฟล์เพิ่ม การ์ดจะแสดงขึ้นมาที่นี่ครับ</p>
+                  <button onClick={fetchDiscoverProfiles} className="mt-4 px-6 py-2.5 rounded-full bg-emerald-500 text-slate-950 font-bold text-xs">
+                    กดรีเฟรชค้นหาอีกครั้ง
                   </button>
                 </div>
               )}
@@ -459,14 +473,18 @@ export default function PeanutsMain({ session }: { session?: any }) {
                   </div>
 
                   <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-                    {messages.map((m) => (
-                      <div key={m.id} className={`flex flex-col max-w-[75%] ${m.sender === 'me' ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
-                        <div className={`px-4 py-2.5 rounded-2xl text-xs ${m.sender === 'me' ? 'bg-emerald-500 text-slate-950' : 'bg-slate-800 text-slate-100'}`}>
-                          {m.text}
+                    {messages.length === 0 ? (
+                      <div className="text-center text-slate-500 text-xs py-10">เริ่มส่งข้อความทักทายกับ {activeChat.name} ได้เลย! 👋</div>
+                    ) : (
+                      messages.map((m) => (
+                        <div key={m.id} className={`flex flex-col max-w-[75%] ${m.sender === 'me' ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
+                          <div className={`px-4 py-2.5 rounded-2xl text-xs ${m.sender === 'me' ? 'bg-emerald-500 text-slate-950 font-medium' : 'bg-slate-800 text-slate-100'}`}>
+                            {m.text}
+                          </div>
+                          <span className="text-[9px] text-slate-500 mt-1">{m.time}</span>
                         </div>
-                        <span className="text-[9px] text-slate-500 mt-1">{m.time}</span>
-                      </div>
-                    ))}
+                      ))
+                    )}
                   </div>
 
                   <form onSubmit={handleSendMessage} className="p-3 bg-slate-950 border-t border-slate-800 flex items-center gap-2">
@@ -479,31 +497,30 @@ export default function PeanutsMain({ session }: { session?: any }) {
               ) : (
                 <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
                   <div>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Matches ใหม่ของคุณ</h3>
-                    <div className="flex gap-3 overflow-x-auto pb-2">
-                      {MOCK_PROFILES.map((item) => (
-                        <div key={item.id} className="flex flex-col items-center gap-1 cursor-pointer flex-shrink-0" onClick={() => setActiveChat({ id: item.id, name: item.name, faculty: item.faculty, avatar: item.photos[0] })}>
-                          <img src={item.photos[0]} alt={item.name} className="w-14 h-14 rounded-2xl object-cover border-2 border-emerald-500" />
-                          <span className="text-[11px] font-semibold text-slate-200">{item.name}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">แชทข้อความ</h3>
-                    {MOCK_MATCHES.map((chat) => (
-                      <div key={chat.id} onClick={() => setActiveChat(chat)} className="p-3 rounded-2xl bg-slate-900 border border-slate-800 cursor-pointer flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                          <img src={chat.avatar} alt={chat.name} className="w-12 h-12 rounded-xl object-cover" />
-                          <div>
-                            <h4 className="text-xs font-bold text-white">{chat.name}</h4>
-                            <p className="text-xs text-slate-400">{chat.lastMessage}</p>
-                          </div>
-                        </div>
-                        <span className="text-[9px] text-slate-500">{chat.time}</span>
+                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Matches ที่แมตช์กันจริง ({realMatches.length})</h3>
+                    
+                    {realMatches.length === 0 ? (
+                      <div className="p-6 rounded-2xl bg-slate-900/50 border border-slate-800 text-center text-slate-400 text-xs">
+                        ยังไม่มีเพื่อนที่แมตช์ตรงกัน <br/>
+                        <span className="text-[10px] text-slate-500 mt-1 block">เมื่อคุณและเพื่อนปัดขวา (Like) ตรงกัน รายชื่อจะแสดงขึ้นที่นี่</span>
                       </div>
-                    ))}
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {realMatches.map((chat) => (
+                          <div key={chat.id} onClick={() => setActiveChat(chat)} className="p-3 rounded-2xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 cursor-pointer flex items-center justify-between transition">
+                            <div className="flex items-center gap-3">
+                              <img src={chat.avatar} alt={chat.name} className="w-12 h-12 rounded-xl object-cover border border-emerald-500/30" />
+                              <div>
+                                <h4 className="text-xs font-bold text-white">{chat.name}</h4>
+                                <p className="text-[11px] text-slate-400">{chat.faculty}</p>
+                                <p className="text-[10px] text-emerald-400 mt-0.5">{chat.lastMessage}</p>
+                              </div>
+                            </div>
+                            <span className="text-[9px] text-slate-500">{chat.time}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
@@ -567,13 +584,11 @@ export default function PeanutsMain({ session }: { session?: any }) {
                   <Edit3 className="w-4 h-4 text-emerald-400" /> แก้ไขข้อมูลส่วนตัว
                 </h3>
 
-                {/* ชื่อที่แสดง */}
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">ชื่อที่แสดง (Display Name)</label>
                   <input type="text" value={myProfile.name} onChange={(e) => setMyProfile({ ...myProfile, name: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500" />
                 </div>
 
-                {/* คณะ */}
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">คณะ (KU KPS)</label>
                   <select 
@@ -587,7 +602,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
                   </select>
                 </div>
 
-                {/* ชั้นปี & เพศ */}
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="text-[11px] text-slate-400 block mb-1">ชั้นปี</label>
@@ -616,7 +630,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
                   </div>
                 </div>
 
-                {/* ประวัติย่อ */}
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">ประวัติย่อ / Bio</label>
                   <textarea rows={3} value={myProfile.bio} onChange={(e) => setMyProfile({ ...myProfile, bio: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none" />
@@ -650,9 +663,9 @@ export default function PeanutsMain({ session }: { session?: any }) {
             <Flame className="w-5 h-5" />
             <span className="text-[10px]">ค้นหา</span>
           </button>
-          <button onClick={() => setActiveTab('matches')} className={`flex flex-col items-center justify-center gap-1 h-full ${activeTab === 'matches' ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
+          <button onClick={() => { setActiveTab('matches'); fetchRealMatches(); }} className={`flex flex-col items-center justify-center gap-1 h-full ${activeTab === 'matches' ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
             <MessageCircle className="w-5 h-5" />
-            <span className="text-[10px]">แชทคู่ Match</span>
+            <span className="text-[10px]">แชทคู่ Match ({realMatches.length})</span>
           </button>
           <button onClick={() => { setActiveTab('profile'); setActiveChat(null); }} className={`flex flex-col items-center justify-center gap-1 h-full ${activeTab === 'profile' ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
             <User className="w-5 h-5" />
