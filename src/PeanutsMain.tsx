@@ -718,16 +718,22 @@ export default function PeanutsMain({ session }: { session?: any }) {
                     </div>
                   ))}
 
-                  {/* Add Photo Slot */}
-                  {Array.from({ length: 6 - myProfile.photos.length }).map((_, idx) => (
-                    <div 
-                      key={idx} 
-                      className="aspect-[3/4] rounded-xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center text-slate-600 hover:border-emerald-500/50 hover:text-emerald-400 cursor-pointer transition"
-                    >
-                      <Plus className="w-6 h-6" />
-                      <span className="text-[9px] mt-1">เพิ่มรูป</span>
-                    </div>
-                  ))}
+{/* Add Photo Slot */}
+{Array.from({ length: 6 - myProfile.photos.length }).map((_, idx) => (
+  <label 
+    key={idx} 
+    className="aspect-[3/4] rounded-xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center text-slate-600 hover:border-emerald-500/50 hover:text-emerald-400 cursor-pointer transition relative"
+  >
+    <input 
+      type="file" 
+      accept="image/*" 
+      onChange={handleUploadPhoto} 
+      className="hidden" 
+    />
+    <Plus className="w-6 h-6" />
+    <span className="text-[9px] mt-1">เพิ่มรูป</span>
+  </label>
+))}
                 </div>
               </div>
 
