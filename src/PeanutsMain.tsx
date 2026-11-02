@@ -17,10 +17,10 @@ const KU_FACULTIES = [
   'คณะเกษตร กำแพงแสน',
   'คณะวิศวกรรมศาสตร์ กำแพงแสน',
   'คณะวิทยาศาสตร์การกีฬา',
-  'คณะศึกษาศาสตร์และวิทยาศาสตร์',
+  'คณะศึกษาศาสตร์และพัฒนศาสตร์',
   'คณะศิลปศาสตร์และวิทยาศาสตร์',
   'คณะอุตสาหกรรมบริการ',
-  'คณะประมง (กำแพงแสน)',
+  'คณะประมง กำแพงแสน',
   'คณะสัตวแพทยศาสตร์ (กำแพงแสน)'
 ];
 
@@ -101,14 +101,14 @@ export default function PeanutsMain({ session }: { session?: any }) {
 
   // User Profile Settings State
   const [myProfile, setMyProfile] = useState({
-    name: 'ตาต้า (Tata)',
-    faculty: 'คณะเกษตร กำแพงแสน',
-    year: 'ชั้นปีที่ 1',
-    gender: 'ชาย',
-    studentId: '6820103778',
-    email: session?.user?.email || 'pitipat.k@ku.th',
-    bio: 'ชอบเล่นเกม Valorant / Minecraft หาเพื่อนคุยเพื่อนเล่นเกม หรือหาคนไปเดินเล่นรอบ ม.',
-    tags: ['#เกษตรKPS', '#Valorant', '#Minecraft', '#ฟังเพลงอินดี้', '#เด็กหอ'],
+    name: 'Unknown',
+    faculty: 'Unknown',
+    year: 'Unknown',
+    gender: 'Unknown',
+    studentId: 'Unknown',
+    email: session?.user?.email || 'Unknown',
+    bio: 'Unknown',
+    tags: ['Unknown'],
     photos: [
       'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800'
     ]
