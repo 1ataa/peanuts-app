@@ -72,7 +72,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
 
     fetchMessages(activeChat.id);
 
-    // เปิดรับข้อความแชทใหม่แบบ Realtime
     const channel = supabase
       .channel('chat_messages')
       .on(
@@ -136,16 +135,23 @@ export default function PeanutsMain({ session }: { session?: any }) {
     }
   };
 
+  // --- ฟังก์ชันดึงการ์ดแบบรองรับการวนคนที่กด Pass กลับมาเมื่อการ์ดหมด ---
   const fetchDiscoverProfiles = async () => {
     if (!session?.user) return;
     try {
-      const { data: swiped } = await supabase
+      // 1. ดึงการปัดทั้งหมดของคุณ (แยกแยะระหว่าง Like กับ Pass)
+      const { data: allSwiped } = await supabase
         .from('likes')
-        .select('to_user_id')
+        .select('to_user_id, action')
         .eq('from_user_id', session.user.id);
 
-      const swipedIds = swiped ? swiped.map((s) => s.to_user_id) : [];
+      const likedIds = allSwiped 
+        ? allSwiped.filter((s) => s.action === 'like' || s.action === 'superlike').map((s) => s.to_user_id) 
+        : [];
+      
+      const allSwipedIds = allSwiped ? allSwiped.map((s) => s.to_user_id) : [];
 
+      // 2. ดึงโปรไฟล์นิสิตคนอื่นที่บันทึกข้อมูลเรียบร้อยแล้ว
       const { data } = await supabase
         .from('profiles')
         .select('*')
@@ -153,7 +159,14 @@ export default function PeanutsMain({ session }: { session?: any }) {
         .not('full_name', 'is', null);
 
       if (data) {
-        const filtered = data.filter((p) => !swipedIds.includes(p.id));
+        // รอบแรก: ดึงเฉพาะคนที่ "ยังไม่เคยถูกปัดเลย" (ไม่เคยทั้ง Like และ Pass)
+        let filtered = data.filter((p) => !allSwipedIds.includes(p.id));
+
+        // ถ้านิสิตใหม่หมดแล้ว: นำคนที่เคยปัด Pass วนกลับมาแสดงใหม่ (ยกเว้นคนที่กด Like/Superlike ไว้แล้ว)
+        if (filtered.length === 0) {
+          filtered = data.filter((p) => !likedIds.includes(p.id));
+        }
+
         const realProfiles = filtered.map((p) => ({
           id: p.id,
           name: p.full_name || 'นิสิต KU KPS',
@@ -215,12 +228,11 @@ export default function PeanutsMain({ session }: { session?: any }) {
     }
   };
 
-  // ดึงข้อความเก่าจาก Supabase
   const fetchMessages = async (partnerId: string) => {
     if (!session?.user) return;
     const myId = session.user.id;
 
-    const { data, error } = await supabase
+    const { data } = await supabase
       .from('messages')
       .select('*')
       .or(`and(sender_id.eq.${myId},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${myId})`)
@@ -237,7 +249,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
     }
   };
 
-  // ส่งข้อความจริงลง Supabase
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!inputMsg.trim() || !activeChat || !session?.user) return;
@@ -502,9 +513,9 @@ export default function PeanutsMain({ session }: { session?: any }) {
                 <div className="flex-1 flex flex-col items-center justify-center text-center p-6 bg-slate-900/50 rounded-3xl border border-slate-800">
                   <Sparkles className="w-8 h-8 text-amber-400 mb-4" />
                   <h3 className="text-xl font-bold text-white mb-2">ยังไม่มีโปรไฟล์ใหม่ในขณะนี้</h3>
-                  <p className="text-xs text-slate-400">เมื่อมีเพื่อนนิสิตกดบันทึกโปรไฟล์เพิ่ม การ์ดจะแสดงขึ้นมาที่นี่ครับ</p>
+                  <p className="text-xs text-slate-400">กดปุ่มด้านล่างเพื่อเริ่มการค้นหาใหม่อีกครั้ง</p>
                   <button onClick={fetchDiscoverProfiles} className="mt-4 px-6 py-2.5 rounded-full bg-emerald-500 text-slate-950 font-bold text-xs">
-                    กดรีเฟรชค้นหาอีกครั้ง
+                    ค้นหาใหม่อีกครั้ง 🔄
                   </button>
                 </div>
               )}
