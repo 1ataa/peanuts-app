@@ -118,6 +118,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
   useEffect(() => {
     if (session?.user) {
       fetchProfile();
+      fetchDiscoverProfiles();
     }
   }, [session]);
 
@@ -146,7 +147,43 @@ export default function PeanutsMain({ session }: { session?: any }) {
       console.log('Error fetching profile:', e);
     }
   };
+// --- ฟังก์ชันดึงนิสิตคนอื่นที่เซฟโปรไฟล์เรียบร้อยแล้ว มาแสดงในการ์ดจับคู่ ---
+  const fetchDiscoverProfiles = async () => {
+    if (!session?.user) return;
 
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .neq('id', session.user.id) // ไม่ดึงโปรไฟล์ตัวเอง
+        .not('full_name', 'is', null); // ดึงเฉพาะคนที่กดบันทึกโปรไฟล์แล้ว
+
+      if (data && data.length > 0) {
+        const realProfiles = data.map((p) => ({
+          id: p.id,
+          name: p.full_name || 'นิสิต KU KPS',
+          age: 20,
+          studentId: p.student_id || '',
+          faculty: p.faculty || 'ม.เกษตร กำแพงแสน',
+          year: p.year || 'ชั้นปีที่ 1',
+          gender: p.gender || 'ไม่ระบุ',
+          verified: true,
+          bio: p.bio || 'ยังไม่มีประวัติย่อ',
+          photos: p.photos && p.photos.length > 0 
+            ? p.photos 
+            : ['https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800'],
+          tags: p.tags && p.tags.length > 0 ? p.tags : ['#KUKPS', '#นิสิตเกษตร'],
+          prompts: p.prompts || []
+        }));
+        
+        setProfiles(realProfiles);
+      } else {
+        setProfiles([]);
+      }
+    } catch (e) {
+      console.log('Error fetching discover profiles:', e);
+    }
+  };
   // --- 2. บันทึกข้อมูลส่วนตัวลง Supabase ---
   const handleSaveProfile = async () => {
     if (!session?.user) return;
@@ -167,6 +204,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
       alert('บันทึกไม่สำเร็จ: ' + error.message);
     } else {
       alert('บันทึกข้อมูลเรียบร้อยแล้ว! ✨');
+      fetchDiscoverProfiles()
     }
   };
 
