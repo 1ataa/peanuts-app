@@ -12,6 +12,21 @@ const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_pEF2JfLNNVNSqP2EkWfLQA_07HIg3xu';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+// รายชื่อคณะใน ม.เกษตรศาสตร์ วิทยาเขตกำแพงแสน
+const KU_FACULTIES = [
+  'คณะเกษตร กำแพงแสน',
+  'คณะวิศวกรรมศาสตร์ กำแพงแสน',
+  'คณะวิทยาศาสตร์การกีฬา',
+  'คณะศึกษาศาสตร์และวิทยาศาสตร์',
+  'คณะศิลปศาสตร์และวิทยาศาสตร์',
+  'คณะอุตสาหกรรมบริการ',
+  'คณะประมง (กำแพงแสน)',
+  'คณะสัตวแพทยศาสตร์ (กำแพงแสน)'
+];
+
+const YEARS = ['ชั้นปีที่ 1', 'ชั้นปีที่ 2', 'ชั้นปีที่ 3', 'ชั้นปีที่ 4', 'บัณฑิตศึกษา (ป.โท/เอก)'];
+const GENDERS = ['ชาย', 'หญิง', 'LGBTQ+ / ไม่จำกัดเพศ', 'ไม่ระบุ'];
+
 // --- Mock Data for Discover Cards ---
 const MOCK_PROFILES = [
   {
@@ -21,6 +36,7 @@ const MOCK_PROFILES = [
     studentId: '66xxxxx',
     faculty: 'คณะเกษตร กำแพงแสน',
     year: 'ชั้นปีที่ 2',
+    gender: 'หญิง',
     verified: true,
     bio: 'สายคาเฟ่ ชอบถ่ายรูป ชอบเดินเล่นแปลงเกษตรตอนเย็น 🌾 หาเพื่อนกินชาบูหน้า ม.',
     photos: [
@@ -39,6 +55,7 @@ const MOCK_PROFILES = [
     studentId: '65xxxxx',
     faculty: 'คณะวิศวกรรมศาสตร์ กำแพงแสน',
     year: 'ชั้นปีที่ 3',
+    gender: 'ชาย',
     verified: true,
     bio: 'เด็กวิศวะเครื่องกล ชอบตีแบตกับเล่นเกมดึกๆ 🏸🎮 หาคนไปวิ่งสระน้ำมหาลัยด้วยกันครับ',
     photos: [
@@ -87,6 +104,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
     name: 'ตาต้า (Tata)',
     faculty: 'คณะเกษตร กำแพงแสน',
     year: 'ชั้นปีที่ 1',
+    gender: 'ชาย',
     studentId: '6820103778',
     email: session?.user?.email || 'pitipat.k@ku.th',
     bio: 'ชอบเล่นเกม Valorant / Minecraft หาเพื่อนคุยเพื่อนเล่นเกม หรือหาคนไปเดินเล่นรอบ ม.',
@@ -116,6 +134,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
           name: data.full_name || 'นิสิต KU KPS',
           faculty: data.faculty || 'คณะเกษตร กำแพงแสน',
           year: data.year || 'ชั้นปีที่ 1',
+          gender: data.gender || 'ชาย',
           studentId: data.student_id || session.user.email?.split('@')[0] || '',
           email: session.user.email || '',
           bio: data.bio || '',
@@ -136,6 +155,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
       full_name: myProfile.name,
       faculty: myProfile.faculty,
       year: myProfile.year,
+      gender: myProfile.gender,
       student_id: myProfile.studentId,
       bio: myProfile.bio,
       tags: myProfile.tags,
@@ -479,7 +499,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
                           หลัก
                         </span>
                       )}
-                      {/* ปุ่ม X สีแดง แสดงผลชัดเจนตลอดเวลา และกดลบได้จริง */}
                       <button 
                         type="button"
                         onClick={(e) => {
@@ -510,11 +529,56 @@ export default function PeanutsMain({ session }: { session?: any }) {
                   <Edit3 className="w-4 h-4 text-emerald-400" /> แก้ไขข้อมูลส่วนตัว
                 </h3>
 
+                {/* ชื่อที่แสดง */}
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">ชื่อที่แสดง (Display Name)</label>
                   <input type="text" value={myProfile.name} onChange={(e) => setMyProfile({ ...myProfile, name: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500" />
                 </div>
 
+                {/* คณะ */}
+                <div>
+                  <label className="text-[11px] text-slate-400 block mb-1">คณะ (KU KPS)</label>
+                  <select 
+                    value={myProfile.faculty} 
+                    onChange={(e) => setMyProfile({ ...myProfile, faculty: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    {KU_FACULTIES.map((fac, idx) => (
+                      <option key={idx} value={fac}>{fac}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* ชั้นปี & เพศ */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">ชั้นปี</label>
+                    <select 
+                      value={myProfile.year} 
+                      onChange={(e) => setMyProfile({ ...myProfile, year: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    >
+                      {YEARS.map((yr, idx) => (
+                        <option key={idx} value={yr}>{yr}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[11px] text-slate-400 block mb-1">เพศ</label>
+                    <select 
+                      value={myProfile.gender} 
+                      onChange={(e) => setMyProfile({ ...myProfile, gender: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                    >
+                      {GENDERS.map((g, idx) => (
+                        <option key={idx} value={g}>{g}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* ประวัติย่อ */}
                 <div>
                   <label className="text-[11px] text-slate-400 block mb-1">ประวัติย่อ / Bio</label>
                   <textarea rows={3} value={myProfile.bio} onChange={(e) => setMyProfile({ ...myProfile, bio: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none" />
