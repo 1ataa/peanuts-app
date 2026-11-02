@@ -96,7 +96,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
     ]
   });
 
-  // --- 1. ดึงข้อมูลโปรไฟล์จาก Supabase Database เมื่อล็อกอินเข้ามา ---
+  // --- 1. ดึงข้อมูลโปรไฟล์จาก Supabase Database ---
   useEffect(() => {
     if (session?.user) {
       fetchProfile();
@@ -105,7 +105,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
 
   const fetchProfile = async () => {
     try {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from('profiles')
         .select('*')
         .eq('id', session.user.id)
@@ -128,7 +128,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
     }
   };
 
-  // --- 2. บันทึกข้อมูลส่วนตัวลง Supabase Database ---
+  // --- 2. บันทึกข้อมูลส่วนตัวลง Supabase ---
   const handleSaveProfile = async () => {
     if (!session?.user) return;
     const { error } = await supabase.from('profiles').upsert({
@@ -150,7 +150,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
     }
   };
 
-  // --- 3. อัปโหลดรูปภาพขึ้น Supabase Storage (Bucket: avatars) ---
+  // --- 3. อัปโหลดรูปภาพขึ้น Supabase Storage ---
   const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !session?.user) return;
@@ -166,7 +166,20 @@ export default function PeanutsMain({ session }: { session?: any }) {
       alert('อัปโหลดรูปภาพไม่สำเร็จ: ' + uploadError.message);
       return;
     }
-// --- ฟังก์ชันลบรูปภาพโปรไฟล์ ---
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
+    const newPhotos = [...myProfile.photos, data.publicUrl];
+
+    setMyProfile((prev) => ({ ...prev, photos: newPhotos }));
+
+    await supabase.from('profiles').upsert({
+      id: session.user.id,
+      photos: newPhotos,
+      updated_at: new Date().toISOString()
+    });
+  };
+
+  // --- 4. ลบรูปภาพโปรไฟล์ ---
   const handleDeletePhoto = async (indexToDelete: number) => {
     const updatedPhotos = myProfile.photos.filter((_, idx) => idx !== indexToDelete);
     setMyProfile((prev) => ({ ...prev, photos: updatedPhotos }));
@@ -178,17 +191,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
         updated_at: new Date().toISOString()
       });
     }
-  };
-    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    const newPhotos = [...myProfile.photos, data.publicUrl];
-
-    setMyProfile((prev) => ({ ...prev, photos: newPhotos }));
-
-    await supabase.from('profiles').upsert({
-      id: session.user.id,
-      photos: newPhotos,
-      updated_at: new Date().toISOString()
-    });
   };
 
   const currentProfile = profiles[currentIndex];
@@ -455,35 +457,39 @@ export default function PeanutsMain({ session }: { session?: any }) {
             <div className="flex-1 overflow-y-auto p-4 bg-slate-950 flex flex-col gap-5">
               <div className="relative p-5 rounded-3xl bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 flex flex-col items-center text-center">
                 <div className="relative mb-3">
-                  <img src={myProfile.photos[0]} alt={myProfile.name} className="w-24 h-24 rounded-full object-cover border-4 border-emerald-500/40 shadow-xl" />
+                  <img src={myProfile.photos[0] || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800'} alt={myProfile.name} className="w-24 h-24 rounded-full object-cover border-4 border-emerald-500/40 shadow-xl" />
                 </div>
                 <h2 className="text-lg font-bold text-white">{myProfile.name}</h2>
                 <p className="text-xs text-slate-400 mt-0.5">{myProfile.faculty} • {myProfile.year}</p>
                 <p className="text-[11px] text-emerald-400 font-mono mt-1">{myProfile.email}</p>
               </div>
 
-              {/* UPLOAD PHOTOS */}
+              {/* UPLOAD & DELETE PHOTOS */}
               <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800">
                 <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
                   <Image className="w-4 h-4 text-emerald-400" /> รูปโปรไฟล์ของคุณ (สูงสุด 6 รูป)
                 </h3>
 
-               <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-3 gap-2">
                   {myProfile.photos.map((url, idx) => (
-                    <div key={idx} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-slate-700 group">
+                    <div key={idx} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-slate-700">
                       <img src={url} alt="profile" className="w-full h-full object-cover" />
                       {idx === 0 && (
                         <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-500 text-[8px] font-bold text-slate-950">
                           หลัก
                         </span>
                       )}
+                      {/* ปุ่ม X สีแดง แสดงผลชัดเจนตลอดเวลา และกดลบได้จริง */}
                       <button 
                         type="button"
-                        onClick={() => handleDeletePhoto(idx)}
-                        className="absolute top-1 right-1 p-1 rounded-full bg-slate-950/80 text-rose-400 hover:bg-rose-500 hover:text-white transition"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeletePhoto(idx);
+                        }}
+                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-slate-950/80 text-rose-400 hover:bg-rose-500 hover:text-white flex items-center justify-center z-10 transition shadow"
                         title="ลบรูปนี้"
                       >
-                        <X className="w-3.5 h-3.5" />
+                        <X className="w-3.5 h-3.5 stroke-[2.5]" />
                       </button>
                     </div>
                   ))}
