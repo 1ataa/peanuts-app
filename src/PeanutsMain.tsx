@@ -1,80 +1,77 @@
-import React, { useState, useEffect } from 'react';
-import { 
-  Heart, X, Star, RotateCcw, MessageCircle, User, Compass, 
-  ShieldCheck, MapPin, GraduationCap, Sparkles, Send, Image, 
-  Settings, LogOut, ChevronLeft, ChevronRight, Info, CheckCircle, 
-  SlidersHorizontal, Plus, Camera, Edit3, Flame, Search, Bell
-} from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
+import { 
+  Flame, Heart, X, MessageSquare, User, LogOut, Sparkles, Send, 
+  ShieldCheck, ArrowLeft, Camera, Loader2, Mic, Square, Plus, Trash2, 
+  ChevronLeft, ChevronRight, Info, CheckCircle2, AlertCircle
+} from 'lucide-react';
 
-// --- Supabase Config ---
 const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_pEF2JfLNNVNSqP2EkWfLQA_07HIg3xu';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 const KU_FACULTIES = [
+  'ไม่ระบุ',
   'คณะเกษตร กำแพงแสน',
   'คณะวิศวกรรมศาสตร์ กำแพงแสน',
-  'คณะวิทยาศาสตร์การกีฬา',
-  'คณะศึกษาศาสตร์และวิทยาศาสตร์',
+  'คณะวิทยาศาสตร์การกีฬาและการออกกำลังกาย',
+  'คณะศึกษาศาสตร์และเวชศาสตร์การกีฬา',
   'คณะศิลปศาสตร์และวิทยาศาสตร์',
   'คณะอุตสาหกรรมบริการ',
   'คณะประมง (กำแพงแสน)',
-  'คณะสัตวแพทยศาสตร์ (กำแพงแสน)',
-  'ไม่ระบุ',
+  'คณะสัตวแพทยศาสตร์',
+  'คณะสิ่งแวดล้อม'
 ];
 
-const YEARS = ['ชั้นปีที่ 1', 'ชั้นปีที่ 2', 'ชั้นปีที่ 3', 'ชั้นปีที่ 4', 'บัณฑิตศึกษา (ป.โท/เอก)'];
-const GENDERS = ['ชาย', 'หญิง', 'LGBTQ+ / ไม่จำกัดเพศ', 'ไม่ระบุ'];
-
-export default function PeanutsMain({ session }: { session?: any }) {
-  const [activeTab, setActiveTab] = useState<'discover' | 'matches' | 'profile'>('discover');
-  
-  // Discover State
+export default function PeanutsMain({ session }: { session: any }) {
+  const [tab, setTab] = useState<'discover' | 'matches' | 'profile'>('discover');
   const [profiles, setProfiles] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [photoIndex, setPhotoIndex] = useState(0);
-  const [lastAction, setLastAction] = useState<string | null>(null);
-  const [matchedUser, setMatchedUser] = useState<any | null>(null);
+  const [cardPhotoIndex, setCardPhotoIndex] = useState(0);
+  const [myProfile, setMyProfile] = useState<any>(null);
+  
+  // Modals
+  const [selectedProfile, setSelectedProfile] = useState<any>(null); // ดูรูป/ประวัติแบบเต็ม
+  const [matchedUser, setMatchedUser] = useState<any>(null); // It's a Match Modal!
 
-  // Real Matches State
-  const [realMatches, setRealMatches] = useState<any[]>([]);
+  // Profile Form States
+  const [displayName, setDisplayName] = useState('');
+  const [faculty, setFaculty] = useState('ไม่ระบุ');
+  const [year, setYear] = useState('ชั้นปีที่ 1');
+  const [gender, setGender] = useState('หญิง');
+  const [interestedIn, setInterestedIn] = useState('all'); // 'all' | 'ชาย' | 'หญิง'
+  const [bio, setBio] = useState('');
+  const [photos, setPhotos] = useState<string[]>(['', '', '']); // 3 รูป
+  const [saving, setSaving] = useState(false);
+  const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
 
-  // Chat State
-  const [activeChat, setActiveChat] = useState<any | null>(null);
-  const [messages, setMessages] = useState<Array<{ id: string; sender: 'me' | 'them'; text: string; time: string }>>([]);
-  const [inputMsg, setInputMsg] = useState('');
+  // Chat & Match States
+  const [matches, setMatches] = useState<any[]>([]);
+  const [activeChat, setActiveChat] = useState<any>(null);
+  const [messages, setMessages] = useState<any[]>([]);
+  const [chatInput, setChatInput] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [uploadingAudio, setUploadingAudio] = useState(false);
+  
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // User Profile State
-  const [myProfile, setMyProfile] = useState({
-    name: 'นิสิต KU KPS',
-    faculty: 'คณะเกษตร กำแพงแสน',
-    year: 'ชั้นปีที่ 1',
-    gender: 'ชาย',
-    studentId: '',
-    email: session?.user?.email || '',
-    bio: '',
-    tags: ['#เกษตรKPS'],
-    photos: ['https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800']
-  });
-
-  // --- 1. โหลดโปรไฟล์ การ์ดค้นหา และรายการ Match ---
   useEffect(() => {
     if (session?.user) {
-      fetchProfile();
-      fetchDiscoverProfiles();
-      fetchRealMatches();
+      loadMyProfile();
+      fetchMatches();
     }
   }, [session]);
 
-  // --- 2. ระบบดึงแชทสด & Supabase Realtime Subscription ---
+  // Realtime Chat Subscription (Strategy A: เปิดเมื่อเปิดห้องแชท & ปิดเมื่อออกจากห้อง)
   useEffect(() => {
     if (!activeChat || !session?.user) return;
 
     fetchMessages(activeChat.id);
 
     const channel = supabase
-      .channel('chat_messages')
+      .channel(`match_chat_${activeChat.id}`)
       .on(
         'postgres_changes',
         {
@@ -83,22 +80,14 @@ export default function PeanutsMain({ session }: { session?: any }) {
           table: 'messages',
         },
         (payload) => {
-          const newMsg = payload.new;
+          const newMsg = payload.new as any;
           if (
             (newMsg.sender_id === session.user.id && newMsg.receiver_id === activeChat.id) ||
             (newMsg.sender_id === activeChat.id && newMsg.receiver_id === session.user.id)
           ) {
             setMessages((prev) => {
               if (prev.some((m) => m.id === newMsg.id.toString())) return prev;
-              return [
-                ...prev,
-                {
-                  id: newMsg.id.toString(),
-                  sender: newMsg.sender_id === session.user.id ? 'me' : 'them',
-                  text: newMsg.content,
-                  time: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                }
-              ];
+              return [...prev, newMsg];
             });
           }
         }
@@ -110,653 +99,764 @@ export default function PeanutsMain({ session }: { session?: any }) {
     };
   }, [activeChat, session]);
 
-  const fetchProfile = async () => {
-    try {
-      const { data } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', session.user.id)
-        .single();
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
 
-      if (data) {
-        setMyProfile({
-          name: data.full_name || 'นิสิต KU KPS',
-          faculty: data.faculty || 'คณะเกษตร กำแพงแสน',
-          year: data.year || 'ชั้นปีที่ 1',
-          gender: data.gender || 'ชาย',
-          studentId: data.student_id || session.user.email?.split('@')[0] || '',
-          email: session.user.email || '',
-          bio: data.bio || '',
-          tags: data.tags || [],
-          photos: data.photos && data.photos.length > 0 ? data.photos : myProfile.photos
-        });
-      }
-    } catch (e) {
-      console.log('Error fetching profile:', e);
-    }
-  };
+  // โหลดข้อมูลโปรไฟล์ของตนเอง
+  const loadMyProfile = async () => {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .single();
 
-  // --- ฟังก์ชันดึงการ์ดแบบรองรับการวนคนที่กด Pass กลับมาเมื่อการ์ดหมด ---
-  const fetchDiscoverProfiles = async () => {
-    if (!session?.user) return;
-    try {
-      // 1. ดึงการปัดทั้งหมดของคุณ (แยกแยะระหว่าง Like กับ Pass)
-      const { data: allSwiped } = await supabase
-        .from('likes')
-        .select('to_user_id, action')
-        .eq('from_user_id', session.user.id);
-
-      const likedIds = allSwiped 
-        ? allSwiped.filter((s) => s.action === 'like' || s.action === 'superlike').map((s) => s.to_user_id) 
-        : [];
+    if (data) {
+      setMyProfile(data);
+      setDisplayName(data.display_name || '');
+      setFaculty(data.faculty || 'ไม่ระบุ');
+      setYear(data.year || 'ชั้นปีที่ 1');
+      setGender(data.gender || 'หญิง');
+      setInterestedIn(data.interested_in || 'all');
+      setBio(data.bio || '');
       
-      const allSwipedIds = allSwiped ? allSwiped.map((s) => s.to_user_id) : [];
+      let loadedPhotos = ['', '', ''];
+      if (Array.isArray(data.photos) && data.photos.length > 0) {
+        loadedPhotos = [data.photos[0] || '', data.photos[1] || '', data.photos[2] || ''];
+      } else if (data.avatar_url) {
+        loadedPhotos[0] = data.avatar_url;
+      }
+      setPhotos(loadedPhotos);
+      fetchDiscoverProfiles(data.interested_in || 'all');
+    } else {
+      const defaultProfile = {
+        id: session.user.id,
+        display_name: 'นิสิตใหม่',
+        faculty: 'ไม่ระบุ',
+        year: 'ชั้นปีที่ 1',
+        gender: 'หญิง',
+        interested_in: 'all',
+        bio: '',
+        photos: []
+      };
+      await supabase.from('profiles').insert(defaultProfile);
+      setMyProfile(defaultProfile);
+      fetchDiscoverProfiles('all');
+    }
+  };
 
-      // 2. ดึงโปรไฟล์นิสิตคนอื่นที่บันทึกข้อมูลเรียบร้อยแล้ว
-      const { data } = await supabase
+  // ดึงรายการโปรไฟล์ที่จะปัด (กรองเพศที่เลือก)
+  const fetchDiscoverProfiles = async (targetGender: string) => {
+    // ดึงรายชื่อคนที่เคยปัด Like/Pass ไปแล้วเพื่อไม่ให้ขึ้นซ้ำ
+    const { data: myLikes } = await supabase
+      .from('likes')
+      .select('liked_user_id')
+      .eq('user_id', session.user.id);
+
+    const swipedIds = myLikes ? myLikes.map((l) => l.liked_user_id) : [];
+    swipedIds.push(session.user.id); // รวม ID ตนเองด้วย
+
+    let query = supabase
+      .from('profiles')
+      .select('*')
+      .not('id', 'in', `(${swipedIds.join(',')})`);
+
+    if (targetGender && targetGender !== 'all') {
+      query = query.eq('gender', targetGender);
+    }
+
+    const { data } = await query;
+    if (data) {
+      setProfiles(data);
+      setCurrentIndex(0);
+      setCardPhotoIndex(0);
+    }
+  };
+
+  // ดึงรายชื่อคู่ Match พร้อมข้อความล่าสุด
+  const fetchMatches = async () => {
+    const { data: myLikes } = await supabase
+      .from('likes')
+      .select('liked_user_id')
+      .eq('user_id', session.user.id);
+
+    if (!myLikes || myLikes.length === 0) {
+      setMatches([]);
+      return;
+    }
+
+    const likedIds = myLikes.map((l) => l.liked_user_id);
+
+    const { data: mutualLikes } = await supabase
+      .from('likes')
+      .select('user_id')
+      .eq('liked_user_id', session.user.id)
+      .in('user_id', likedIds);
+
+    if (mutualLikes && mutualLikes.length > 0) {
+      const matchIds = mutualLikes.map((m) => m.user_id);
+      const { data: matchedProfiles } = await supabase
         .from('profiles')
         .select('*')
-        .neq('id', session.user.id)
-        .not('full_name', 'is', null);
+        .in('id', matchIds);
 
-      if (data) {
-        // รอบแรก: ดึงเฉพาะคนที่ "ยังไม่เคยถูกปัดเลย" (ไม่เคยทั้ง Like และ Pass)
-        let filtered = data.filter((p) => !allSwipedIds.includes(p.id));
+      if (matchedProfiles) {
+        // ดึงข้อความล่าสุดของแต่ละคู่
+        const matchesWithLastMsg = await Promise.all(
+          matchedProfiles.map(async (profile) => {
+            const { data: lastMsg } = await supabase
+              .from('messages')
+              .select('*')
+              .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${profile.id}),and(sender_id.eq.${profile.id},receiver_id.eq.${session.user.id})`)
+              .order('created_at', { ascending: false })
+              .limit(1)
+              .single();
 
-        // ถ้านิสิตใหม่หมดแล้ว: นำคนที่เคยปัด Pass วนกลับมาแสดงใหม่ (ยกเว้นคนที่กด Like/Superlike ไว้แล้ว)
-        if (filtered.length === 0) {
-          filtered = data.filter((p) => !likedIds.includes(p.id));
-        }
-
-        const realProfiles = filtered.map((p) => ({
-          id: p.id,
-          name: p.full_name || 'นิสิต KU KPS',
-          age: 20,
-          studentId: p.student_id || '',
-          faculty: p.faculty || 'ม.เกษตร กำแพงแสน',
-          year: p.year || 'ชั้นปีที่ 1',
-          gender: p.gender || 'ไม่ระบุ',
-          verified: true,
-          bio: p.bio || 'ยังไม่มีประวัติย่อ',
-          photos: p.photos && p.photos.length > 0 
-            ? p.photos 
-            : ['https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800'],
-          tags: p.tags && p.tags.length > 0 ? p.tags : ['#KUKPS', '#นิสิตเกษตร']
-        }));
-
-        setProfiles(realProfiles);
-        setCurrentIndex(0);
-      }
-    } catch (e) {
-      console.log('Error fetching discover profiles:', e);
-    }
-  };
-
-  const fetchRealMatches = async () => {
-    if (!session?.user) return;
-    try {
-      const { data: matchesData } = await supabase
-        .from('matches')
-        .select('*')
-        .or(`user_1.eq.${session.user.id},user_2.eq.${session.user.id}`);
-
-      if (matchesData && matchesData.length > 0) {
-        const partnerIds = matchesData.map((m) =>
-          m.user_1 === session.user.id ? m.user_2 : m.user_1
+            return {
+              ...profile,
+              lastMessage: lastMsg ? (lastMsg.content.startsWith('[VOICE]:') ? '🎙️ ข้อความเสียง' : lastMsg.content) : 'เริ่มส่งข้อความทักทายกันเลย!'
+            };
+          })
         );
-
-        const { data: partnersProfile } = await supabase
-          .from('profiles')
-          .select('*')
-          .in('id', partnerIds);
-
-        if (partnersProfile) {
-          const list = partnersProfile.map((p) => ({
-            id: p.id,
-            name: p.full_name || 'นิสิต KU KPS',
-            faculty: p.faculty || 'ม.เกษตร',
-            avatar: p.photos && p.photos.length > 0 ? p.photos[0] : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800',
-            lastMessage: 'กดเพื่อเปิดห้องแชทสด 💬',
-            time: 'ตอนนี้'
-          }));
-          setRealMatches(list);
-        }
-      } else {
-        setRealMatches([]);
+        setMatches(matchesWithLastMsg);
       }
-    } catch (e) {
-      console.log('Error fetching matches:', e);
+    } else {
+      setMatches([]);
     }
   };
 
-  const fetchMessages = async (partnerId: string) => {
-    if (!session?.user) return;
-    const myId = session.user.id;
+  // กด Like
+  const handleLike = async () => {
+    if (currentIndex >= profiles.length) return;
+    const targetUser = profiles[currentIndex];
 
+    await supabase.from('likes').insert({
+      user_id: session.user.id,
+      liked_user_id: targetUser.id
+    });
+
+    // ตรวจสอบว่าฝ่ายตรงข้ามเคยกด Like เราไว้หรือยัง (Match!)
+    const { data: isMutual } = await supabase
+      .from('likes')
+      .select('*')
+      .eq('user_id', targetUser.id)
+      .eq('liked_user_id', session.user.id)
+      .single();
+
+    if (isMutual) {
+      setMatchedUser(targetUser);
+    }
+
+    setCurrentIndex((prev) => prev + 1);
+    setCardPhotoIndex(0);
+    fetchMatches();
+  };
+
+  // กด Pass
+  const handlePass = () => {
+    setCurrentIndex((prev) => prev + 1);
+    setCardPhotoIndex(0);
+  };
+
+  // ดึงประวัติข้อความแชท
+  const fetchMessages = async (targetId: string) => {
     const { data } = await supabase
       .from('messages')
       .select('*')
-      .or(`and(sender_id.eq.${myId},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${myId})`)
+      .or(`and(sender_id.eq.${session.user.id},receiver_id.eq.${targetId}),and(sender_id.eq.${targetId},receiver_id.eq.${session.user.id})`)
       .order('created_at', { ascending: true });
 
     if (data) {
-      const formatted = data.map((m) => ({
-        id: m.id.toString(),
-        sender: m.sender_id === myId ? ('me' as const) : ('them' as const),
-        text: m.content,
-        time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      }));
-      setMessages(formatted);
+      setMessages(data);
     }
   };
 
+  // ส่งข้อความแชท
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!inputMsg.trim() || !activeChat || !session?.user) return;
+    if (!chatInput.trim() || !activeChat) return;
 
-    const textToSend = inputMsg.trim();
-    setInputMsg('');
+    const textToSend = chatInput.trim();
+    setChatInput('');
 
-    const { error } = await supabase.from('messages').insert({
+    await supabase.from('messages').insert({
       sender_id: session.user.id,
       receiver_id: activeChat.id,
       content: textToSend
     });
+  };
 
-    if (error) {
-      alert('ส่งข้อความไม่สำเร็จ: ' + error.message);
+  // --- ระบบอัดและส่งข้อความเสียงในแชทคู่ Match (รองรับทั้ง iOS & Android) ---
+  const getAudioConfig = () => {
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isIOS || MediaRecorder.isTypeSupported('audio/mp4')) {
+      return { mimeType: 'audio/mp4', ext: 'm4a', contentType: 'audio/mp4' };
+    }
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      return { mimeType: 'audio/webm;codecs=opus', ext: 'webm', contentType: 'audio/webm' };
+    }
+    return { mimeType: 'audio/webm', ext: 'webm', contentType: 'audio/webm' };
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const { mimeType } = getAudioConfig();
+      const options = mimeType ? { mimeType } : undefined;
+      
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const { mimeType: configMime, ext, contentType } = getAudioConfig();
+        const recordedType = mediaRecorder.mimeType || configMime;
+        const audioBlob = new Blob(audioChunksRef.current, { type: recordedType });
+        stream.getTracks().forEach((track) => track.stop());
+        await uploadAndSendAudio(audioBlob, ext, contentType);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert('ไม่สามารถเข้าถึงไมโครโฟนได้ กรุณาอนุญาตการใช้งานไมค์ในบราวเซอร์');
     }
   };
 
-  const handleSwipe = async (direction: 'pass' | 'like' | 'superlike') => {
-    if (!currentProfile || !session?.user) return;
-    setLastAction(direction);
-    setPhotoIndex(0);
-
-    const myId = session.user.id;
-    const targetId = currentProfile.id;
-
-    await supabase.from('likes').upsert({
-      from_user_id: myId,
-      to_user_id: targetId,
-      action: direction
-    });
-
-    if (direction === 'like' || direction === 'superlike') {
-      const { data: mutualLike } = await supabase
-        .from('likes')
-        .select('*')
-        .eq('from_user_id', targetId)
-        .eq('to_user_id', myId)
-        .in('action', ['like', 'superlike'])
-        .maybeSingle();
-
-      if (mutualLike) {
-        await supabase.from('matches').insert({
-          user_1: myId,
-          user_2: targetId
-        });
-
-        setMatchedUser(currentProfile);
-        fetchRealMatches();
-      }
-    }
-
-    setTimeout(() => {
-      setCurrentIndex((prev) => prev + 1);
-      setLastAction(null);
-    }, 250);
-  };
-
-  const handleSaveProfile = async () => {
-    if (!session?.user) return;
-    const { error } = await supabase.from('profiles').upsert({
-      id: session.user.id,
-      full_name: myProfile.name,
-      faculty: myProfile.faculty,
-      year: myProfile.year,
-      gender: myProfile.gender,
-      student_id: myProfile.studentId,
-      bio: myProfile.bio,
-      tags: myProfile.tags,
-      photos: myProfile.photos,
-      updated_at: new Date().toISOString()
-    });
-
-    if (error) {
-      alert('บันทึกไม่สำเร็จ: ' + error.message);
-    } else {
-      alert('บันทึกข้อมูลเรียบร้อยแล้ว! ✨');
-      fetchDiscoverProfiles();
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
     }
   };
 
-  const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file || !session?.user) return;
-
-    const fileExt = file.name.split('.').pop();
-    const filePath = `${session.user.id}/${Date.now()}.${fileExt}`;
+  const uploadAndSendAudio = async (blob: Blob, ext: string, contentType: string) => {
+    if (!activeChat) return;
+    setUploadingAudio(true);
+    const fileName = `${session.user.id}_${Date.now()}.${ext}`;
 
     const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file, { upsert: true });
+      .from('audio-messages')
+      .upload(fileName, blob, { contentType, upsert: true });
 
     if (uploadError) {
-      alert('อัปโหลดรูปภาพไม่สำเร็จ: ' + uploadError.message);
+      alert('ส่งข้อความเสียงไม่สำเร็จ: ' + uploadError.message);
+      setUploadingAudio(false);
       return;
     }
 
-    const { data } = supabase.storage.from('avatars').getPublicUrl(filePath);
-    const newPhotos = [...myProfile.photos, data.publicUrl];
+    const { data } = supabase.storage.from('audio-messages').getPublicUrl(fileName);
 
-    setMyProfile((prev) => ({ ...prev, photos: newPhotos }));
-
-    await supabase.from('profiles').upsert({
-      id: session.user.id,
-      photos: newPhotos,
-      updated_at: new Date().toISOString()
+    await supabase.from('messages').insert({
+      sender_id: session.user.id,
+      receiver_id: activeChat.id,
+      content: `[VOICE]:${data.publicUrl}`
     });
+
+    setUploadingAudio(false);
   };
 
-  const handleDeletePhoto = async (indexToDelete: number) => {
-    const updatedPhotos = myProfile.photos.filter((_, idx) => idx !== indexToDelete);
-    setMyProfile((prev) => ({ ...prev, photos: updatedPhotos }));
+  // --- ระบบจัดการรูปโปรไฟล์หลายรูป (3 Slots) ---
+  const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, slotIndex: number) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+    const file = e.target.files[0];
+    setUploadingSlot(slotIndex);
 
-    if (session?.user) {
-      await supabase.from('profiles').upsert({
-        id: session.user.id,
-        photos: updatedPhotos,
-        updated_at: new Date().toISOString()
-      });
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${session.user.id}_slot${slotIndex}_${Date.now()}.${fileExt}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('avatars')
+      .upload(fileName, file, { upsert: true });
+
+    if (uploadError) {
+      alert('อัปโหลดรูปไม่สำเร็จ: ' + uploadError.message);
+      setUploadingSlot(null);
+      return;
     }
+
+    const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+    const newPhotos = [...photos];
+    newPhotos[slotIndex] = data.publicUrl;
+    setPhotos(newPhotos);
+    setUploadingSlot(null);
   };
 
-  const currentProfile = profiles[currentIndex];
-
-  const handleNextPhoto = (e: React.MouseEvent, maxPhotos: number) => {
-    e.stopPropagation();
-    if (photoIndex < maxPhotos - 1) setPhotoIndex(photoIndex + 1);
+  const handleRemovePhoto = (slotIndex: number) => {
+    const newPhotos = [...photos];
+    newPhotos[slotIndex] = '';
+    setPhotos(newPhotos);
   };
 
-  const handlePrevPhoto = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (photoIndex > 0) setPhotoIndex(photoIndex - 1);
+  // บันทึกโปรไฟล์
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+
+    const validPhotos = photos.filter((p) => p.trim() !== '');
+
+    const updatedData = {
+      display_name: displayName,
+      faculty,
+      year,
+      gender,
+      interested_in: interestedIn,
+      bio,
+      photos: validPhotos,
+      avatar_url: validPhotos[0] || ''
+    };
+
+    const { error } = await supabase
+      .from('profiles')
+      .update(updatedData)
+      .eq('id', session.user.id);
+
+    setSaving(false);
+
+    if (error) {
+      alert('บันทึกข้อมูลไม่สำเร็จ: ' + error.message);
+    } else {
+      alert('บันทึกการเปลี่ยนแปลงโปรไฟล์เรียบร้อยแล้ว!');
+      setMyProfile({ ...myProfile, ...updatedData });
+      fetchDiscoverProfiles(interestedIn);
+    }
   };
 
   return (
     <div className="flex justify-center items-center min-h-screen bg-slate-900 font-sans p-0 sm:p-4 text-slate-100">
-      <div className="w-full max-w-md h-[100vh] sm:h-[880px] bg-slate-950 sm:rounded-3xl shadow-2xl flex flex-col overflow-hidden border border-slate-800 relative">
-
-        {/* TOP HEADER */}
-        <header className="px-5 py-4 bg-slate-950/90 backdrop-blur-md border-b border-slate-800/80 flex justify-between items-center z-20">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-amber-500 via-orange-500 to-emerald-500 flex items-center justify-center shadow-lg shadow-orange-500/20">
-              <Flame className="w-5 h-5 text-white fill-white" />
-            </div>
-            <div>
-              <h1 className="text-lg font-bold bg-gradient-to-r from-amber-400 via-orange-300 to-emerald-400 bg-clip-text text-transparent leading-none">
-                Peanuts KU KPS
-              </h1>
-              <span className="text-[10px] text-slate-400 flex items-center gap-1 font-medium mt-0.5">
-                <ShieldCheck className="w-3 h-3 text-emerald-400 inline" /> นิสิต ม.เกษตร กำแพงแสน
-              </span>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button className="w-9 h-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white transition">
-              <SlidersHorizontal className="w-4 h-4" />
-            </button>
-            <button className="w-9 h-9 rounded-full bg-slate-900 border border-slate-800 flex items-center justify-center text-slate-400 hover:text-white relative transition">
-              <Bell className="w-4 h-4" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-500"></span>
-            </button>
-          </div>
-        </header>
-
-        {/* MAIN CONTENT AREA */}
-        <main className="flex-1 overflow-hidden relative flex flex-col bg-slate-950">
-
-          {/* TAB 1: DISCOVER */}
-          {activeTab === 'discover' && (
-            <div className="flex-1 flex flex-col p-4 relative overflow-hidden">
-              {currentProfile ? (
-                <div className="relative flex-1 w-full flex flex-col justify-between">
-                  <div className={`relative flex-1 w-full bg-slate-900 rounded-3xl overflow-hidden shadow-2xl border border-slate-800/80 flex flex-col transition-all duration-300 ${
-                    lastAction === 'like' ? 'translate-x-32 rotate-12 opacity-0' :
-                    lastAction === 'pass' ? '-translate-x-32 -rotate-12 opacity-0' :
-                    lastAction === 'superlike' ? '-translate-y-32 scale-95 opacity-0' : ''
-                  }`}>
-
-                    <div className="relative flex-1 bg-slate-800 overflow-hidden group">
-                      <img 
-                        src={currentProfile.photos[photoIndex]} 
-                        alt={currentProfile.name}
-                        className="w-full h-full object-cover select-none"
-                      />
-
-                      <div className="absolute inset-0 flex justify-between z-10">
-                        <div className="w-1/2 h-full cursor-pointer flex items-center justify-start pl-2" onClick={(e) => handlePrevPhoto(e)}>
-                          {photoIndex > 0 && (
-                            <div className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white">
-                              <ChevronLeft className="w-5 h-5" />
-                            </div>
-                          )}
-                        </div>
-                        <div className="w-1/2 h-full cursor-pointer flex items-center justify-end pr-2" onClick={(e) => handleNextPhoto(e, currentProfile.photos.length)}>
-                          {photoIndex < currentProfile.photos.length - 1 && (
-                            <div className="w-8 h-8 rounded-full bg-black/40 backdrop-blur-md flex items-center justify-center text-white">
-                              <ChevronRight className="w-5 h-5" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="absolute top-3 inset-x-4 flex gap-1.5 z-20">
-                        {currentProfile.photos.map((_: any, i: number) => (
-                          <div key={i} className={`h-1 flex-1 rounded-full transition-all ${i === photoIndex ? 'bg-white shadow-md' : 'bg-white/30'}`} />
-                        ))}
-                      </div>
-
-                      <div className="absolute top-7 left-4 z-20">
-                        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-slate-950/70 backdrop-blur-md text-emerald-400 text-xs font-semibold border border-emerald-500/30">
-                          <CheckCircle className="w-3.5 h-3.5" /> ยืนยันนิสิต @ku.th
-                        </span>
-                      </div>
-
-                      <div className="absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent z-10 pointer-events-none" />
-
-                      <div className="absolute bottom-0 inset-x-0 p-5 z-20 flex flex-col gap-3">
-                        <div>
-                          <div className="flex items-baseline gap-2">
-                            <h2 className="text-2xl font-black text-white tracking-tight">{currentProfile.name}</h2>
-                            <span className="text-sm font-medium text-amber-400">({currentProfile.gender})</span>
-                          </div>
-                          <div className="flex items-center gap-2 text-xs font-medium text-emerald-300 mt-1">
-                            <GraduationCap className="w-4 h-4 text-emerald-400" />
-                            <span>{currentProfile.faculty} • {currentProfile.year}</span>
-                          </div>
-                        </div>
-
-                        <p className="text-xs text-slate-300 leading-relaxed line-clamp-2">{currentProfile.bio}</p>
-
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {currentProfile.tags.map((tag: string, idx: number) => (
-                            <span key={idx} className="px-2.5 py-1 rounded-lg bg-slate-800/80 border border-slate-700/60 text-[11px] text-amber-300 font-medium">
-                              {tag}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    </div>
-
-                  </div>
-
-                  {/* BUTTONS */}
-                  <div className="pt-4 pb-2 flex justify-center items-center gap-4 z-30">
-                    <button onClick={() => { setCurrentIndex(0); setPhotoIndex(0); }} className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 text-amber-400 flex items-center justify-center hover:scale-110 active:scale-95">
-                      <RotateCcw className="w-5 h-5" />
-                    </button>
-                    <button onClick={() => handleSwipe('pass')} className="w-14 h-14 rounded-full bg-slate-900 border border-rose-500/30 text-rose-500 flex items-center justify-center hover:bg-rose-500 hover:text-white hover:scale-110 active:scale-95">
-                      <X className="w-7 h-7 stroke-[2.5]" />
-                    </button>
-                    <button onClick={() => handleSwipe('superlike')} className="w-12 h-12 rounded-full bg-slate-900 border border-sky-500/30 text-sky-400 flex items-center justify-center hover:bg-sky-500 hover:text-white hover:scale-110 active:scale-95">
-                      <Star className="w-5 h-5 fill-sky-400 hover:fill-white" />
-                    </button>
-                    <button onClick={() => handleSwipe('like')} className="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center hover:scale-110 active:scale-95">
-                      <Heart className="w-7 h-7 fill-slate-950 stroke-[2.5]" />
-                    </button>
-                  </div>
-
-                </div>
-              ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-6 bg-slate-900/50 rounded-3xl border border-slate-800">
-                  <Sparkles className="w-8 h-8 text-amber-400 mb-4" />
-                  <h3 className="text-xl font-bold text-white mb-2">ยังไม่มีโปรไฟล์ใหม่ในขณะนี้</h3>
-                  <p className="text-xs text-slate-400">กดปุ่มด้านล่างเพื่อเริ่มการค้นหาใหม่อีกครั้ง</p>
-                  <button onClick={fetchDiscoverProfiles} className="mt-4 px-6 py-2.5 rounded-full bg-emerald-500 text-slate-950 font-bold text-xs">
-                    ค้นหาใหม่อีกครั้ง
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 2: MATCHES */}
-          {activeTab === 'matches' && (
-            <div className="flex-1 flex flex-col h-full bg-slate-950">
-              {activeChat ? (
-                <div className="flex-1 flex flex-col h-full bg-slate-900">
-                  <div className="p-3 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => setActiveChat(null)} className="p-1 text-slate-400 hover:text-white">
-                        <ChevronLeft className="w-6 h-6" />
-                      </button>
-                      <img src={activeChat.avatar} alt={activeChat.name} className="w-10 h-10 rounded-full object-cover border border-emerald-500/40" />
-                      <div>
-                        <h4 className="text-sm font-bold text-white">{activeChat.name}</h4>
-                        <p className="text-[10px] text-slate-400">{activeChat.faculty}</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-3">
-                    {messages.length === 0 ? (
-                      <div className="text-center text-slate-500 text-xs py-10">เริ่มส่งข้อความทักทายกับ {activeChat.name} ได้เลย! 👋</div>
-                    ) : (
-                      messages.map((m) => (
-                        <div key={m.id} className={`flex flex-col max-w-[75%] ${m.sender === 'me' ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
-                          <div className={`px-4 py-2.5 rounded-2xl text-xs ${m.sender === 'me' ? 'bg-emerald-500 text-slate-950 font-medium' : 'bg-slate-800 text-slate-100'}`}>
-                            {m.text}
-                          </div>
-                          <span className="text-[9px] text-slate-500 mt-1">{m.time}</span>
-                        </div>
-                      ))
-                    )}
-                  </div>
-
-                  <form onSubmit={handleSendMessage} className="p-3 bg-slate-950 border-t border-slate-800 flex items-center gap-2">
-                    <input type="text" placeholder="พิมพ์ข้อความ..." value={inputMsg} onChange={(e) => setInputMsg(e.target.value)} className="flex-1 bg-slate-900 border border-slate-800 rounded-full px-4 py-2 text-xs text-white focus:outline-none focus:border-emerald-500" />
-                    <button type="submit" className="w-9 h-9 rounded-full bg-emerald-500 text-slate-950 flex items-center justify-center">
-                      <Send className="w-4 h-4" />
-                    </button>
-                  </form>
-                </div>
-              ) : (
-                <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
-                  <div>
-                    <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Matches ที่แมตช์กันจริง ({realMatches.length})</h3>
-                    
-                    {realMatches.length === 0 ? (
-                      <div className="p-6 rounded-2xl bg-slate-900/50 border border-slate-800 text-center text-slate-400 text-xs">
-                        ยังไม่มีเพื่อนที่แมตช์ตรงกัน <br/>
-                        <span className="text-[10px] text-slate-500 mt-1 block">เมื่อคุณและเพื่อนปัดขวา (Like) ตรงกัน รายชื่อจะแสดงขึ้นที่นี่</span>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col gap-2">
-                        {realMatches.map((chat) => (
-                          <div key={chat.id} onClick={() => setActiveChat(chat)} className="p-3 rounded-2xl bg-slate-900 border border-slate-800 hover:border-emerald-500/50 cursor-pointer flex items-center justify-between transition">
-                            <div className="flex items-center gap-3">
-                              <img src={chat.avatar} alt={chat.name} className="w-12 h-12 rounded-xl object-cover border border-emerald-500/30" />
-                              <div>
-                                <h4 className="text-xs font-bold text-white">{chat.name}</h4>
-                                <p className="text-[11px] text-slate-400">{chat.faculty}</p>
-                                <p className="text-[10px] text-emerald-400 mt-0.5">{chat.lastMessage}</p>
-                              </div>
-                            </div>
-                            <span className="text-[9px] text-slate-500">{chat.time}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* TAB 3: PROFILE */}
-          {activeTab === 'profile' && (
-            <div className="flex-1 overflow-y-auto p-4 bg-slate-950 flex flex-col gap-5">
-              <div className="relative p-5 rounded-3xl bg-gradient-to-b from-slate-900 to-slate-950 border border-slate-800 flex flex-col items-center text-center">
-                <div className="relative mb-3">
-                  <img src={myProfile.photos[0] || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800'} alt={myProfile.name} className="w-24 h-24 rounded-full object-cover border-4 border-emerald-500/40 shadow-xl" />
-                </div>
-                <h2 className="text-lg font-bold text-white">{myProfile.name}</h2>
-                <p className="text-xs text-slate-400 mt-0.5">{myProfile.faculty} • {myProfile.year}</p>
-                <p className="text-[11px] text-emerald-400 font-mono mt-1">{myProfile.email}</p>
-              </div>
-
-              {/* UPLOAD & DELETE PHOTOS */}
-              <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800">
-                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                  <Image className="w-4 h-4 text-emerald-400" /> รูปโปรไฟล์ของคุณ (สูงสุด 6 รูป)
-                </h3>
-
-                <div className="grid grid-cols-3 gap-2">
-                  {myProfile.photos.map((url, idx) => (
-                    <div key={idx} className="relative aspect-[3/4] rounded-xl overflow-hidden border border-slate-700">
-                      <img src={url} alt="profile" className="w-full h-full object-cover" />
-                      {idx === 0 && (
-                        <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded bg-emerald-500 text-[8px] font-bold text-slate-950">
-                          หลัก
-                        </span>
-                      )}
-                      <button 
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDeletePhoto(idx);
-                        }}
-                        className="absolute top-1 right-1 w-6 h-6 rounded-full bg-slate-950/80 text-rose-400 hover:bg-rose-500 hover:text-white flex items-center justify-center z-10 transition shadow"
-                        title="ลบรูปนี้"
-                      >
-                        <X className="w-3.5 h-3.5 stroke-[2.5]" />
-                      </button>
-                    </div>
-                  ))}
-
-                  {Array.from({ length: 6 - myProfile.photos.length }).map((_, idx) => (
-                    <label key={idx} className="aspect-[3/4] rounded-xl border-2 border-dashed border-slate-800 flex flex-col items-center justify-center text-slate-600 hover:border-emerald-500/50 hover:text-emerald-400 cursor-pointer transition relative">
-                      <input type="file" accept="image/*" onChange={handleUploadPhoto} className="hidden" />
-                      <Plus className="w-6 h-6" />
-                      <span className="text-[9px] mt-1">เพิ่มรูป</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* EDIT FORM */}
-              <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800 flex flex-col gap-4">
-                <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                  <Edit3 className="w-4 h-4 text-emerald-400" /> แก้ไขข้อมูลส่วนตัว
-                </h3>
-
-                <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">ชื่อที่แสดง (Display Name)</label>
-                  <input type="text" value={myProfile.name} onChange={(e) => setMyProfile({ ...myProfile, name: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500" />
-                </div>
-
-                <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">คณะ (KU KPS)</label>
-                  <select 
-                    value={myProfile.faculty} 
-                    onChange={(e) => setMyProfile({ ...myProfile, faculty: e.target.value })}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                  >
-                    {KU_FACULTIES.map((fac, idx) => (
-                      <option key={idx} value={fac}>{fac}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-2">
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">ชั้นปี</label>
-                    <select 
-                      value={myProfile.year} 
-                      onChange={(e) => setMyProfile({ ...myProfile, year: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                    >
-                      {YEARS.map((yr, idx) => (
-                        <option key={idx} value={yr}>{yr}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] text-slate-400 block mb-1">เพศ</label>
-                    <select 
-                      value={myProfile.gender} 
-                      onChange={(e) => setMyProfile({ ...myProfile, gender: e.target.value })}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
-                    >
-                      {GENDERS.map((g, idx) => (
-                        <option key={idx} value={g}>{g}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-[11px] text-slate-400 block mb-1">ประวัติย่อ / Bio</label>
-                  <textarea rows={3} value={myProfile.bio} onChange={(e) => setMyProfile({ ...myProfile, bio: e.target.value })} className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none" />
-                </div>
-
-                <button onClick={handleSaveProfile} className="w-full py-2.5 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs hover:opacity-90 active:scale-95 transition">
-                  บันทึกการเปลี่ยนแปลง
-                </button>
-              </div>
-
-              {/* LOGOUT */}
-              <div className="p-4 rounded-3xl bg-slate-900 border border-slate-800">
-                <button 
-                  onClick={async () => {
-                    await supabase.auth.signOut();
-                  }}
-                  className="w-full py-2.5 px-3 rounded-xl hover:bg-rose-500/10 text-rose-400 text-xs font-medium flex items-center gap-2 transition"
-                >
-                  <LogOut className="w-4 h-4" /> ออกจากระบบ
-                </button>
-              </div>
-
-            </div>
-          )}
-
-        </main>
-
-        {/* BOTTOM NAV */}
-        <nav className="h-16 bg-slate-950/95 backdrop-blur-md border-t border-slate-800/80 grid grid-cols-3 items-center z-20">
-          <button onClick={() => { setActiveTab('discover'); setActiveChat(null); }} className={`flex flex-col items-center justify-center gap-1 h-full ${activeTab === 'discover' ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
-            <Flame className="w-5 h-5" />
-            <span className="text-[10px]">ค้นหา</span>
-          </button>
-          <button onClick={() => { setActiveTab('matches'); fetchRealMatches(); }} className={`flex flex-col items-center justify-center gap-1 h-full ${activeTab === 'matches' ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
-            <MessageCircle className="w-5 h-5" />
-            <span className="text-[10px]">แชทคู่ Match ({realMatches.length})</span>
-          </button>
-          <button onClick={() => { setActiveTab('profile'); setActiveChat(null); }} className={`flex flex-col items-center justify-center gap-1 h-full ${activeTab === 'profile' ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
-            <User className="w-5 h-5" />
-            <span className="text-[10px]">โปรไฟล์</span>
-          </button>
-        </nav>
-
-        {/* MATCH MODAL */}
+      <div className="w-full max-w-md h-[100vh] sm:h-[880px] bg-slate-950 sm:rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden border border-slate-800 relative">
+        
+        {/* --- MODAL 1: IT'S A MATCH! --- */}
         {matchedUser && (
-          <div className="absolute inset-0 bg-slate-950/90 backdrop-blur-md z-50 flex flex-col items-center justify-center p-6 text-center">
-            <Sparkles className="w-10 h-10 text-emerald-400 mb-4 animate-bounce" />
-            <h2 className="text-3xl font-black bg-gradient-to-r from-emerald-400 to-amber-300 bg-clip-text text-transparent mb-1">
-              IT'S A MATCH!
-            </h2>
-            <p className="text-xs text-slate-300 mb-6">คุณและ <span className="text-emerald-400 font-bold">{matchedUser.name}</span> ถูกใจซึ่งกันและกัน 🎉</p>
-            <button onClick={() => setMatchedUser(null)} className="px-8 py-3 rounded-full bg-emerald-500 text-slate-950 font-bold text-xs">
-              ค้นหาต่อ
+          <div className="absolute inset-0 bg-slate-950/95 z-50 flex flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-300">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-500 to-amber-400 flex items-center justify-center shadow-xl shadow-rose-500/20 mb-4 animate-bounce">
+              <Heart className="w-10 h-10 text-white fill-white" />
+            </div>
+            <h1 className="text-3xl font-black bg-gradient-to-r from-rose-400 via-amber-300 to-emerald-400 bg-clip-text text-transparent">
+              It's a Match!
+            </h1>
+            <p className="text-xs text-slate-300 mt-2">
+              คุณและ <span className="font-bold text-amber-400">{matchedUser.display_name}</span> ถูกใจซึ่งกันและกัน
+            </p>
+
+            <div className="flex items-center justify-center gap-4 my-8">
+              <div className="w-20 h-20 rounded-2xl bg-slate-900 border-2 border-emerald-400 overflow-hidden shadow-lg">
+                <img src={myProfile?.avatar_url || photos[0]} alt="" className="w-full h-full object-cover" />
+              </div>
+              <Flame className="w-6 h-6 text-amber-400 fill-amber-400 animate-pulse" />
+              <div className="w-20 h-20 rounded-2xl bg-slate-900 border-2 border-rose-400 overflow-hidden shadow-lg">
+                <img src={matchedUser.avatar_url || (matchedUser.photos && matchedUser.photos[0])} alt="" className="w-full h-full object-cover" />
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setActiveChat(matchedUser);
+                setMatchedUser(null);
+                setTab('matches');
+              }}
+              className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs rounded-xl hover:opacity-90 active:scale-95 transition shadow-lg shadow-emerald-500/20 mb-3"
+            >
+              ส่งข้อความทักทายเลย 💬
+            </button>
+            <button
+              onClick={() => setMatchedUser(null)}
+              className="text-xs text-slate-400 hover:text-white py-2"
+            >
+              ไว้ทีหลัง
             </button>
           </div>
         )}
 
-      </div>
-    </div>
-  );
-}
+        {/* --- MODAL 2: FULL PROFILE DETAIL --- */}
+        {selectedProfile && (
+          <div className="absolute inset-0 bg-slate-950/90 z-40 flex flex-col overflow-y-auto p-4 animate-in fade-in duration-200">
+            <button 
+              onClick={() => setSelectedProfile(null)}
+              className="self-start text-xs text-slate-400 hover:text-white flex items-center gap-1 mb-3"
+            >
+              <ArrowLeft className="w-4 h-4" /> ปิดหน้าต่าง
+            </button>
+
+            <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex-1 flex flex-col">
+              <div className="h-80 bg-slate-950 relative">
+                <img 
+                  src={selectedProfile.photos?.[0] || selectedProfile.avatar_url} 
+                  alt="" 
+                  className="w-full h-full object-cover" 
+                />
+              </div>
+              <div className="p-5 space-y-3">
+                <h2 className="text-xl font-bold text-white">{selectedProfile.display_name}</h2>
+                <div className="flex flex-wrap gap-2 text-xs">
+                  <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-full">
+                    {selectedProfile.faculty}
+                  </span>
+                  <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full">
+                    {selectedProfile.year}
+                  </span>
+                  <span className="px-3 py-1 bg-slate-800 text-slate-300 rounded-full">
+                    เพศ: {selectedProfile.gender}
+                  </span>
+                </div>
+                <div className="pt-2 border-t border-slate-800">
+                  <h4 className="text-xs font-bold text-slate-400 mb-1">เกี่ยวกับฉัน</h4>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    {selectedProfile.bio || 'ไม่ได้ระบุข้อความแนะนำตัว'}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* --- ACTIVE MATCH CHAT VIEW --- */}
+        {activeChat ? (
+          <div className="flex-1 flex flex-col bg-slate-950">
+            <header className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button onClick={() => setActiveChat(null)} className="p-1 text-slate-400 hover:text-white">
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                <div className="w-9 h-9 rounded-full bg-slate-800 overflow-hidden border border-slate-700">
+                  {activeChat.photos?.[0] || activeChat.avatar_url ? (
+                    <img src={activeChat.photos?.[0] || activeChat.avatar_url} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <User className="w-full h-full p-2 text-slate-500" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="text-xs font-bold text-white">{activeChat.display_name}</h3>
+                  <span className="text-[10px] text-amber-400">{activeChat.faculty}</span>
+                </div>
+              </div>
+            </header>
+
+            {/* Chat Message Stream */}
+            <main className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 font-sans text-xs bg-slate-950">
+              {messages.map((m) => {
+                const isMe = m.sender_id === session.user.id;
+                const isVoice = m.content.startsWith('[VOICE]:');
+                const audioUrl = isVoice ? m.content.replace('[VOICE]:', '') : '';
+
+                return (
+                  <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl text-xs ${
+                      isMe ? 'bg-emerald-500 text-slate-950 font-medium' : 'bg-slate-900 text-white border border-slate-800'
+                    }`}>
+                      {isVoice ? (
+                        <audio controls preload="metadata" playsInline src={audioUrl} className="h-8 max-w-[210px] my-0.5" />
+                      ) : (
+                        <span className="break-all">{m.content}</span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={chatEndRef} />
+            </main>
+
+            {/* Chat Input & Voice Recorder Form */}
+            <form onSubmit={handleSendMessage} className="p-3 bg-slate-900 border-t border-slate-800 flex items-center gap-2">
+              {isRecording ? (
+                <div className="flex-1 flex items-center justify-between bg-rose-500/10 border border-rose-500/40 rounded-xl px-4 py-2 text-xs text-rose-400 animate-pulse">
+                  <span>กำลังอัดเสียง...</span>
+                  <button
+                    type="button"
+                    onClick={stopRecording}
+                    className="flex items-center gap-1 bg-rose-500 text-white font-bold px-3 py-1 rounded-lg text-[11px] hover:bg-rose-600 transition"
+                  >
+                    <Square className="w-3.5 h-3.5 fill-white" /> หยุดและส่ง
+                  </button>
+                </div>
+              ) : uploadingAudio ? (
+                <div className="flex-1 flex items-center justify-center gap-2 bg-slate-950 border border-slate-800 rounded-xl py-2.5 text-xs text-amber-400">
+                  <Loader2 className="w-4 h-4 animate-spin" /> กำลังส่งเสียง...
+                </div>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={startRecording}
+                    className="w-9 h-9 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-rose-400 hover:border-rose-500/40 flex items-center justify-center transition shrink-0"
+                    title="กดเพื่ออัดเสียง"
+                  >
+                    <Mic className="w-4 h-4" />
+                  </button>
+
+                  <input
+                    type="text"
+                    placeholder="พิมพ์ข้อความ..."
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-emerald-500 font-sans"
+                  />
+
+                  <button
+                    type="submit"
+                    className="w-9 h-9 rounded-xl bg-emerald-500 text-slate-950 font-bold flex items-center justify-center hover:opacity-90 active:scale-95 transition shrink-0"
+                  >
+                    <Send className="w-4 h-4" />
+                  </button>
+                </>
+              )}
+            </form>
+          </div>
+        ) : (
+          <>
+            {/* --- MAIN TABS CONTENT --- */}
+            <div className="flex-1 overflow-y-auto">
+              
+              {/* TAB 1: ค้นหา / ปัดการ์ด (DISCOVER) */}
+              {tab === 'discover' && (
+                <div className="p-4 h-full flex flex-col justify-between">
+                  <div className="flex justify-between items-center py-2">
+                    <h1 className="text-lg font-black bg-gradient-to-r from-amber-400 to-emerald-400 bg-clip-text text-transparent flex items-center gap-1.5">
+                      <Flame className="w-5 h-5 text-amber-400 fill-amber-400" /> Peanuts KU KPS
+                    </h1>
+                    <span className="text-[10px] bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-full text-amber-400 font-mono">
+                      ปัดเจอ: {interestedIn === 'all' ? 'ทุกเพศ' : interestedIn}
+                    </span>
+                  </div>
+
+                  {/* CARD AREA */}
+                  {profiles.length > 0 && currentIndex < profiles.length ? (
+                    <div className="flex-1 my-3 bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col relative">
+                      
+                      {/* Photo Carousel Area */}
+                      <div className="flex-1 bg-slate-950 flex items-center justify-center relative group">
+                        {(() => {
+                          const currentCard = profiles[currentIndex];
+                          const cardPhotos = Array.isArray(currentCard.photos) && currentCard.photos.length > 0 
+                            ? currentCard.photos.filter((p: string) => p !== '')
+                            : [currentCard.avatar_url];
+
+                          const activePhoto = cardPhotos[cardPhotoIndex] || cardPhotos[0];
+
+                          return (
+                            <>
+                              {activePhoto ? (
+                                <img src={activePhoto} alt="Profile" className="w-full h-full object-cover" />
+                              ) : (
+                                <User className="w-24 h-24 text-slate-700" />
+                              )}
+
+                              {/* Carousel Photo Dots Indicator */}
+                              {cardPhotos.length > 1 && (
+                                <div className="absolute top-3 inset-x-0 flex justify-center gap-1.5 z-10 px-4">
+                                  {cardPhotos.map((_: any, idx: number) => (
+                                    <div
+                                      key={idx}
+                                      className={`h-1 rounded-full flex-1 transition-all ${
+                                        idx === cardPhotoIndex ? 'bg-white' : 'bg-white/30'
+                                      }`}
+                                    />
+                                  ))}
+                                </div>
+                              )}
+
+                              {/* Tap left/right to change photo */}
+                              {cardPhotos.length > 1 && (
+                                <>
+                                  <button
+                                    onClick={() => setCardPhotoIndex((prev) => (prev > 0 ? prev - 1 : cardPhotos.length - 1))}
+                                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 transition"
+                                  >
+                                    <ChevronLeft className="w-5 h-5" />
+                                  </button>
+                                  <button
+                                    onClick={() => setCardPhotoIndex((prev) => (prev < cardPhotos.length - 1 ? prev + 1 : 0))}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 transition"
+                                  >
+                                    <ChevronRight className="w-5 h-5" />
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          );
+                        })()}
+
+                        {/* Card Info Overlay */}
+                        <div 
+                          onClick={() => setSelectedProfile(profiles[currentIndex])}
+                          className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent p-5 cursor-pointer"
+                        >
+                          <h2 className="text-xl font-bold text-white flex items-center justify-between">
+                            <span>{profiles[currentIndex].display_name}</span>
+                            <span className="text-xs text-slate-400 font-normal">กดดูประวัติ ➔</span>
+                          </h2>
+                          <p className="text-xs text-amber-400 font-medium mt-0.5">
+                            {profiles[currentIndex].faculty} • {profiles[currentIndex].year} ({profiles[currentIndex].gender})
+                          </p>
+                          <p className="text-xs text-slate-300 mt-2 line-clamp-2">
+                            {profiles[currentIndex].bio || 'ไม่มีข้อความแนะนำตัว'}
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* SWIPE ACTION BUTTONS */}
+                      <div className="p-4 bg-slate-950 flex justify-center gap-6 border-t border-slate-900">
+                        <button 
+                          onClick={handlePass}
+                          className="w-14 h-14 rounded-full bg-slate-900 border border-slate-800 text-slate-400 flex items-center justify-center hover:text-rose-400 hover:border-rose-500/40 active:scale-90 transition shadow-lg"
+                        >
+                          <X className="w-6 h-6" />
+                        </button>
+                        <button 
+                          onClick={handleLike}
+                          className="w-14 h-14 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center active:scale-90 transition shadow-lg shadow-emerald-500/20"
+                        >
+                          <Heart className="w-6 h-6 fill-slate-950" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 my-3 bg-slate-900/50 border border-slate-800/80 rounded-3xl flex flex-col items-center justify-center p-6 text-center">
+                      <Sparkles className="w-12 h-12 text-slate-600 mb-3" />
+                      <p className="text-sm font-bold text-slate-300">ไม่มีโปรไฟล์เพิ่มเติมในขณะนี้</p>
+                      <p className="text-xs text-slate-500 mt-1">ลองสลับตัวกรอง "อยากปัดเจอเพศไหน" ในหน้าโปรไฟล์เพื่อเปิดกว้างการค้นหาดูครับ</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 2: แชทคู่ MATCH (MATCHES) */}
+              {tab === 'matches' && (
+                <div className="p-4 h-full flex flex-col">
+                  <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
+                    <MessageSquare className="w-5 h-5 text-emerald-400" /> คู่ Match ของคุณ ({matches.length})
+                  </h2>
+                  
+                  {matches.length > 0 ? (
+                    <div className="space-y-2">
+                      {matches.map((m) => (
+                        <div
+                          key={m.id}
+                          onClick={() => setActiveChat(m)}
+                          className="p-3 bg-slate-900/80 border border-slate-800 rounded-2xl flex items-center gap-3 hover:border-emerald-500/40 cursor-pointer active:scale-98 transition"
+                        >
+                          <div className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden shrink-0 border border-slate-700">
+                            {m.photos?.[0] || m.avatar_url ? (
+                              <img src={m.photos?.[0] || m.avatar_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <User className="w-full h-full p-2.5 text-slate-500" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex justify-between items-center">
+                              <h3 className="text-xs font-bold text-white truncate">{m.display_name}</h3>
+                              <span className="text-[10px] text-amber-400 shrink-0">{m.faculty}</span>
+                            </div>
+                            <p className="text-[11px] text-slate-400 mt-0.5 truncate">{m.lastMessage}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-xs text-slate-500 gap-2">
+                      <Heart className="w-8 h-8 text-slate-700" />
+                      <span>ยังไม่มีคู่ Match ในขณะนี้ ลองไปปัดการ์ดเพิ่มดูนะ!</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: โปรไฟล์ & แก้ไขข้อมูล (PROFILE) */}
+              {tab === 'profile' && (
+                <div className="p-5 space-y-5">
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    <User className="w-5 h-5 text-emerald-400" /> โปรไฟล์ของฉัน
+                  </h2>
+
+                  {/* MULTI-PHOTO SLOTS (3 SLOTS) */}
+                  <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3">
+                    <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+                      รูปโปรไฟล์ของคุณ (สูงสุด 3 รูป)
+                    </label>
+                    <div className="grid grid-cols-3 gap-2">
+                      {photos.map((photoUrl, idx) => (
+                        <div key={idx} className="aspect-[3/4] bg-slate-950 border border-slate-800 rounded-xl relative overflow-hidden flex flex-col items-center justify-center group">
+                          {photoUrl ? (
+                            <>
+                              <img src={photoUrl} alt="" className="w-full h-full object-cover" />
+                              <button
+                                type="button"
+                                onClick={() => handleRemovePhoto(idx)}
+                                className="absolute top-1 right-1 p-1 rounded-lg bg-rose-500/80 text-white opacity-0 group-hover:opacity-100 transition"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <label className="cursor-pointer w-full h-full flex flex-col items-center justify-center text-slate-500 hover:text-emerald-400 transition">
+                              {uploadingSlot === idx ? (
+                                <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
+                              ) : (
+                                <>
+                                  <Plus className="w-6 h-6 mb-1" />
+                                  <span className="text-[10px]">เพิ่มรูป {idx + 1}</span>
+                                </>
+                              )}
+                              <input type="file" accept="image/*" onChange={(e) => handlePhotoUpload(e, idx)} className="hidden" />
+                            </label>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* PROFILE FORM */}
+                  <form onSubmit={handleSaveProfile} className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-4">
+                    <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">แก้ไขข้อมูลส่วนตัว</h3>
+
+                    <div>
+                      <label className="text-xs text-slate-400 font-medium block mb-1">ชื่อที่แสดง (Display Name)</label>
+                      <input
+                        type="text"
+                        required
+                        value={displayName}
+                        onChange={(e) => setDisplayName(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="text-xs text-slate-400 font-medium block mb-1">คณะ (KU KPS)</label>
+                      <select
+                        value={faculty}
+                        onChange={(e) => setFaculty(e.target.value)}
+                        className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 transition"
+                      >
+                        {KU_FACULTIES.map((f) => (
+                          <option key={f} value={f}>{f}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    {/* Gender & Interested In Filter */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-slate-400 font-medium block mb-1">เพศของคุณ</label>
+                        <select
+                          value={gender}
+                          onChange={(e) => setGender(e.target.value)}
+                          className="w-full px-3 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-xs text-white focus:outline-none focus:border-emerald-500 transition"
+                        >
+                          <option value="ชาย">ชาย</option>
+                          <option value="หญิง">หญิง</option>
+                          <option value="อื่นๆ">อื่นๆ</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-xs text-amber-400 font-medium block mb-1">อยากปัดเจอเพศไหน</label>
+                        <select
+                          value={interestedIn}
+                          onChange={(e) => setInterestedIn(e.target.value)}
+                          className="w-full px-3 py-2.5 bg
