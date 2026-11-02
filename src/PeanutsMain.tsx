@@ -531,9 +531,8 @@ export default function PeanutsMain({ session }: { session: any }) {
                 </h2>
                 <div className="flex flex-wrap gap-2 text-xs">
                   <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full flex items-center gap-1">
-                    🎓 {selectedProfile.faculty} • {selectedProfile.year}
+                    🎓 {selectedProfile.faculty} • {selectedProfile.year} ({selectedProfile.gender || 'ไม่ระบุ'})
                   </span>
-                  <span className="px-3 py-1 bg-slate-800 text-slate-300 rounded-full">เพศ: {selectedProfile.gender}</span>
                 </div>
                 <p className="text-xs text-slate-300 leading-relaxed pt-2 border-t border-slate-800/80">
                   {selectedProfile.bio || 'ไม่ได้ระบุข้อความแนะนำตัว'}
@@ -623,7 +622,7 @@ export default function PeanutsMain({ session }: { session: any }) {
               {/* TAB 1: DISCOVER */}
               {tab === 'discover' && (
                 <div className="p-4 h-full flex flex-col justify-between">
-                  {/* HEADER BAR (โลโก้ + ชื่อ + ปุ่มฟิลเตอร์ & แจ้งเตือน) */}
+                  {/* HEADER BAR */}
                   <div className="flex justify-between items-center py-2 px-1">
                     <div className="flex items-center gap-2.5">
                       <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
@@ -670,21 +669,20 @@ export default function PeanutsMain({ session }: { session: any }) {
 
                           return (
                             <>
-                              {/* Background Image */}
                               {activePhoto ? (
                                 <img src={activePhoto} alt="Profile" className="w-full h-full object-cover" />
                               ) : (
                                 <User className="w-24 h-24 text-slate-700" />
                               )}
 
-                              {/* Top Bar inside Card: Verified Badge */}
+                              {/* Top Bar: Verified Badge */}
                               <div className="absolute top-3 left-3 z-10">
                                 <span className="px-2.5 py-1 rounded-full bg-slate-950/70 border border-emerald-500/40 text-emerald-400 text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
                                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> ยืนยันนิสิต @ku.th
                                 </span>
                               </div>
 
-                              {/* Story Photo Progress Dots */}
+                              {/* Photo Dots */}
                               {cardPhotos.length > 1 && (
                                 <div className="absolute top-3 inset-x-0 flex justify-center gap-1.5 z-10 px-28">
                                   {cardPhotos.map((_: any, idx: number) => (
@@ -693,7 +691,7 @@ export default function PeanutsMain({ session }: { session: any }) {
                                 </div>
                               )}
 
-                              {/* Photo Swipe Touch Arrows */}
+                              {/* Photo Arrows */}
                               {cardPhotos.length > 1 && (
                                 <>
                                   <button onClick={() => setCardPhotoIndex((prev) => (prev > 0 ? prev - 1 : cardPhotos.length - 1))} className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 transition">
@@ -708,29 +706,27 @@ export default function PeanutsMain({ session }: { session: any }) {
                           );
                         })()}
 
-                        {/* Profile Info Overlay at Bottom of Card */}
+                        {/* Profile Info Overlay */}
                         <div onClick={() => setSelectedProfile(profiles[currentIndex])} className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-[#0b0e14] via-[#0b0e14]/80 to-transparent p-5 cursor-pointer space-y-1.5">
-                          {/* Name and Age */}
                           <h2 className="text-2xl font-black text-white flex items-center gap-2">
                             <span>{profiles[currentIndex].display_name}</span>
                             <span className="text-xl font-normal text-slate-300">{profiles[currentIndex].age || 20}</span>
                           </h2>
 
-                          {/* Faculty & Year */}
+                          {/* คณะ • ชั้นปี (เพศ) */}
                           <p className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
-                            🎓 {profiles[currentIndex].faculty} • {profiles[currentIndex].year}
+                            🎓 {profiles[currentIndex].faculty} • {profiles[currentIndex].year} ({profiles[currentIndex].gender || 'ไม่ระบุ'})
                           </p>
 
-                          {/* Bio */}
                           <p className="text-xs text-slate-300 line-clamp-2 pt-1 font-sans">
-                            {profiles[currentIndex].bio || ''}
+                            {profiles[currentIndex].bio || 'ไม่มีข้อความแนะนำตัว'}
                           </p>
                         </div>
                       </div>
 
-                      {/* --- ACTION BUTTONS (REWIND / PASS / SUPER LIKE / LIKE) --- */}
+                      {/* --- ACTION BUTTONS (X และ หัวใจ ใหญ่ w-14 h-14 เท่ากันเป๊ะ) --- */}
                       <div className="py-4 px-6 bg-[#0b0e14] flex justify-center items-center gap-4 border-t border-slate-900">
-                        {/* REWIND / UNDO */}
+                        {/* REWIND */}
                         <button 
                           onClick={handleRewind}
                           disabled={historyStack.length === 0}
@@ -740,16 +736,16 @@ export default function PeanutsMain({ session }: { session: any }) {
                           <RotateCcw className="w-4 h-4" />
                         </button>
 
-                        {/* PASS (X) */}
+                        {/* PASS (X - ขนาดใหญ่ w-14 h-14) */}
                         <button 
                           onClick={handlePass} 
-                          className="w-13 h-13 rounded-full bg-[#121721] border border-rose-500/30 text-rose-400 flex items-center justify-center hover:bg-rose-500/10 active:scale-90 transition shadow-lg"
+                          className="w-14 h-14 rounded-full bg-[#121721] border border-rose-500/30 text-rose-400 flex items-center justify-center hover:bg-rose-500/10 active:scale-90 transition shadow-lg"
                           title="ข้าม"
                         >
                           <X className="w-6 h-6" />
                         </button>
 
-                        {/* SUPER LIKE (STAR) */}
+                        {/* SUPER LIKE */}
                         <button 
                           onClick={() => handleLike(true)} 
                           className="w-11 h-11 rounded-full bg-[#121721] border border-sky-500/40 text-sky-400 flex items-center justify-center hover:bg-sky-500/10 active:scale-90 transition shadow-lg"
@@ -758,7 +754,7 @@ export default function PeanutsMain({ session }: { session: any }) {
                           <Star className="w-5 h-5 fill-sky-400" />
                         </button>
 
-                        {/* LIKE (BIG TEAL HEART) */}
+                        {/* LIKE (HEART - ขนาดใหญ่ w-14 h-14) */}
                         <button 
                           onClick={() => handleLike(false)} 
                           className="w-14 h-14 rounded-full bg-teal-400 text-slate-950 flex items-center justify-center hover:bg-teal-300 active:scale-90 transition shadow-xl shadow-teal-400/20"
