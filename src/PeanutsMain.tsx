@@ -21,6 +21,7 @@ const KU_FACULTIES = [
   'คณะอุตสาหกรรมบริการ',
   'คณะประมง (กำแพงแสน)',
   'คณะสัตวแพทยศาสตร์ (กำแพงแสน)'
+  'ไม่ระบุ',
 ];
 
 const YEARS = ['ชั้นปีที่ 1', 'ชั้นปีที่ 2', 'ชั้นปีที่ 3', 'ชั้นปีที่ 4', 'บัณฑิตศึกษา (ป.โท/เอก)'];
@@ -515,7 +516,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
                   <h3 className="text-xl font-bold text-white mb-2">ยังไม่มีโปรไฟล์ใหม่ในขณะนี้</h3>
                   <p className="text-xs text-slate-400">กดปุ่มด้านล่างเพื่อเริ่มการค้นหาใหม่อีกครั้ง</p>
                   <button onClick={fetchDiscoverProfiles} className="mt-4 px-6 py-2.5 rounded-full bg-emerald-500 text-slate-950 font-bold text-xs">
-                    ค้นหาใหม่อีกครั้ง 🔄
+                    ค้นหาใหม่อีกครั้ง
                   </button>
                 </div>
               )}
