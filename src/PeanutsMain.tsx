@@ -2,8 +2,8 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
   Flame, Heart, X, MessageSquare, User, LogOut, Sparkles, Send, 
-  ArrowLeft, Camera, Loader2, Mic, Square, Plus, Trash2, 
-  ChevronLeft, ChevronRight
+  ShieldCheck, ArrowLeft, Camera, Loader2, Mic, Square, Plus, Trash2, 
+  ChevronLeft, ChevronRight, Star, BadgeCheck
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
@@ -215,7 +215,7 @@ export default function PeanutsMain({ session }: { session: any }) {
     }
   };
 
-  const handleLike = async () => {
+  const handleLike = async (isSuperLike = false) => {
     if (currentIndex >= profiles.length) return;
     const targetUser = profiles[currentIndex];
 
@@ -224,6 +224,7 @@ export default function PeanutsMain({ session }: { session: any }) {
       liked_user_id: targetUser.id
     });
 
+    // เช็กว่าอีกฝ่ายกด Like เราด้วยหรือยัง
     const { data: isMutual } = await supabase
       .from('likes')
       .select('*')
@@ -231,7 +232,7 @@ export default function PeanutsMain({ session }: { session: any }) {
       .eq('liked_user_id', session.user.id)
       .single();
 
-    if (isMutual) {
+    if (isMutual || isSuperLike) {
       setMatchedUser(targetUser);
     }
 
@@ -414,25 +415,27 @@ export default function PeanutsMain({ session }: { session: any }) {
     <div className="flex justify-center items-center min-h-screen bg-slate-900 font-sans p-0 sm:p-4 text-slate-100">
       <div className="w-full max-w-md h-[100vh] sm:h-[880px] bg-slate-950 sm:rounded-3xl shadow-2xl flex flex-col justify-between overflow-hidden border border-slate-800 relative">
         
-        {/* Match Modal */}
+        {/* --- MATCH MODAL --- */}
         {matchedUser && (
-          <div className="absolute inset-0 bg-slate-950/95 z-50 flex flex-col items-center justify-center p-6 text-center">
-            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-500 to-amber-400 flex items-center justify-center shadow-xl mb-4 animate-bounce">
-              <Heart className="w-10 h-10 text-white fill-white" />
+          <div className="absolute inset-0 bg-slate-950/95 z-50 flex flex-col items-center justify-center p-6 text-center backdrop-blur-md">
+            <div className="w-20 h-20 rounded-full bg-gradient-to-tr from-rose-500 via-amber-400 to-emerald-400 p-0.5 shadow-2xl shadow-rose-500/30 mb-4 animate-bounce">
+              <div className="w-full h-full bg-slate-950 rounded-full flex items-center justify-center">
+                <Heart className="w-10 h-10 text-rose-500 fill-rose-500" />
+              </div>
             </div>
-            <h1 className="text-3xl font-black bg-gradient-to-r from-rose-400 to-emerald-400 bg-clip-text text-transparent">
+            <h1 className="text-3xl font-black bg-gradient-to-r from-rose-400 via-amber-300 to-emerald-400 bg-clip-text text-transparent">
               It's a Match!
             </h1>
             <p className="text-xs text-slate-300 mt-2">
-              คุณและ <span className="font-bold text-amber-400">{matchedUser.display_name}</span> ถูกใจกันแล้ว
+              คุณและ <span className="font-bold text-amber-400">{matchedUser.display_name}</span> แมทช์กันแล้ว!
             </p>
 
             <div className="flex items-center justify-center gap-4 my-8">
-              <div className="w-20 h-20 rounded-2xl bg-slate-900 border-2 border-emerald-400 overflow-hidden">
+              <div className="w-20 h-20 rounded-2xl bg-slate-900 border-2 border-emerald-400 overflow-hidden shadow-xl">
                 <img src={myProfile?.avatar_url || photos[0]} alt="" className="w-full h-full object-cover" />
               </div>
-              <Flame className="w-6 h-6 text-amber-400 fill-amber-400" />
-              <div className="w-20 h-20 rounded-2xl bg-slate-900 border-2 border-rose-400 overflow-hidden">
+              <Flame className="w-7 h-7 text-amber-400 fill-amber-400 animate-pulse" />
+              <div className="w-20 h-20 rounded-2xl bg-slate-900 border-2 border-rose-400 overflow-hidden shadow-xl">
                 <img src={matchedUser.avatar_url || (matchedUser.photos && matchedUser.photos[0])} alt="" className="w-full h-full object-cover" />
               </div>
             </div>
@@ -443,7 +446,7 @@ export default function PeanutsMain({ session }: { session: any }) {
                 setMatchedUser(null);
                 setTab('matches');
               }}
-              className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg mb-3"
+              className="w-full py-3.5 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/20 mb-3"
             >
               ส่งข้อความทักทายเลย 💬
             </button>
@@ -453,24 +456,27 @@ export default function PeanutsMain({ session }: { session: any }) {
           </div>
         )}
 
-        {/* Selected Profile Detail Modal */}
+        {/* --- SELECTED PROFILE DETAIL MODAL --- */}
         {selectedProfile && (
-          <div className="absolute inset-0 bg-slate-950/90 z-40 flex flex-col overflow-y-auto p-4">
+          <div className="absolute inset-0 bg-slate-950/90 z-40 flex flex-col overflow-y-auto p-4 backdrop-blur-md">
             <button onClick={() => setSelectedProfile(null)} className="self-start text-xs text-slate-400 hover:text-white flex items-center gap-1 mb-3">
-              <ArrowLeft className="w-4 h-4" /> ปิดหน้าต่าง
+              <ArrowLeft className="w-4 h-4" /> ย้อนกลับ
             </button>
-            <div className="bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex-1 flex flex-col">
+            <div className="bg-slate-900/90 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex-1 flex flex-col">
               <div className="h-80 bg-slate-950 relative">
                 <img src={selectedProfile.photos?.[0] || selectedProfile.avatar_url} alt="" className="w-full h-full object-cover" />
               </div>
               <div className="p-5 space-y-3">
-                <h2 className="text-xl font-bold text-white">{selectedProfile.display_name}</h2>
+                <h2 className="text-xl font-bold text-white flex items-center gap-2">
+                  <span>{selectedProfile.display_name}</span>
+                  <BadgeCheck className="w-5 h-5 text-emerald-400 fill-emerald-400/20 shrink-0" />
+                </h2>
                 <div className="flex flex-wrap gap-2 text-xs">
                   <span className="px-3 py-1 bg-amber-500/10 border border-amber-500/30 text-amber-400 rounded-full">{selectedProfile.faculty}</span>
                   <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full">{selectedProfile.year}</span>
                   <span className="px-3 py-1 bg-slate-800 text-slate-300 rounded-full">เพศ: {selectedProfile.gender}</span>
                 </div>
-                <p className="text-xs text-slate-300 leading-relaxed pt-2 border-t border-slate-800">
+                <p className="text-xs text-slate-300 leading-relaxed pt-2 border-t border-slate-800/80">
                   {selectedProfile.bio || 'ไม่ได้ระบุข้อความแนะนำตัว'}
                 </p>
               </div>
@@ -478,18 +484,21 @@ export default function PeanutsMain({ session }: { session: any }) {
           </div>
         )}
 
-        {/* Active Chat View */}
+        {/* --- ACTIVE MATCH CHAT VIEW --- */}
         {activeChat ? (
           <div className="flex-1 flex flex-col bg-slate-950">
             <header className="px-4 py-3 bg-slate-900 border-b border-slate-800 flex items-center gap-3">
               <button onClick={() => setActiveChat(null)} className="p-1 text-slate-400 hover:text-white">
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <div className="w-9 h-9 rounded-full bg-slate-800 overflow-hidden border border-slate-700">
+              <div className="w-9 h-9 rounded-full bg-slate-800 overflow-hidden border border-emerald-500/40">
                 <img src={activeChat.photos?.[0] || activeChat.avatar_url} alt="" className="w-full h-full object-cover" />
               </div>
               <div>
-                <h3 className="text-xs font-bold text-white">{activeChat.display_name}</h3>
+                <h3 className="text-xs font-bold text-white flex items-center gap-1">
+                  <span>{activeChat.display_name}</span>
+                  <BadgeCheck className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400/20 shrink-0" />
+                </h3>
                 <span className="text-[10px] text-amber-400">{activeChat.faculty}</span>
               </div>
             </header>
@@ -550,23 +559,30 @@ export default function PeanutsMain({ session }: { session: any }) {
           </div>
         ) : (
           <>
-            {/* Tabs Container */}
+            {/* --- MAIN TABS CONTENT --- */}
             <div className="flex-1 overflow-y-auto">
               
-              {/* Tab 1: Discover */}
+              {/* TAB 1: DISCOVER */}
               {tab === 'discover' && (
                 <div className="p-4 h-full flex flex-col justify-between">
+                  {/* Header Bar */}
                   <div className="flex justify-between items-center py-2">
-                    <h1 className="text-lg font-black bg-gradient-to-r from-amber-400 to-emerald-400 bg-clip-text text-transparent flex items-center gap-1.5">
-                      <Flame className="w-5 h-5 text-amber-400 fill-amber-400" /> Peanuts KU KPS
-                    </h1>
-                    <span className="text-[10px] bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-full text-amber-400 font-mono">
+                    <div>
+                      <h1 className="text-lg font-black bg-gradient-to-r from-amber-400 via-orange-400 to-emerald-400 bg-clip-text text-transparent flex items-center gap-1.5">
+                        <Flame className="w-5 h-5 text-amber-400 fill-amber-400" /> Peanuts KU KPS
+                      </h1>
+                      <div className="flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
+                        <ShieldCheck className="w-3 h-3 text-emerald-400" /> ยืนยันเฉพาะนิสิต @ku.th
+                      </div>
+                    </div>
+                    <span className="text-[10px] bg-slate-900 border border-amber-500/30 px-2.5 py-1 rounded-full text-amber-300 font-mono">
                       ปัดเจอ: {interestedIn === 'all' ? 'ทุกเพศ' : interestedIn}
                     </span>
                   </div>
 
+                  {/* Card Display Area */}
                   {profiles.length > 0 && currentIndex < profiles.length ? (
-                    <div className="flex-1 my-3 bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col relative">
+                    <div className="flex-1 my-3 bg-slate-900 border border-slate-800/80 rounded-3xl overflow-hidden shadow-2xl flex flex-col relative">
                       <div className="flex-1 bg-slate-950 flex items-center justify-center relative group">
                         {(() => {
                           const currentCard = profiles[currentIndex];
@@ -584,14 +600,16 @@ export default function PeanutsMain({ session }: { session: any }) {
                                 <User className="w-24 h-24 text-slate-700" />
                               )}
 
+                              {/* Photo Dots */}
                               {cardPhotos.length > 1 && (
                                 <div className="absolute top-3 inset-x-0 flex justify-center gap-1.5 z-10 px-4">
                                   {cardPhotos.map((_: any, idx: number) => (
-                                    <div key={idx} className={`h-1 rounded-full flex-1 ${idx === cardPhotoIndex ? 'bg-white' : 'bg-white/30'}`} />
+                                    <div key={idx} className={`h-1 rounded-full flex-1 transition-all ${idx === cardPhotoIndex ? 'bg-white shadow' : 'bg-white/30'}`} />
                                   ))}
                                 </div>
                               )}
 
+                              {/* Photo Swipe Arrows */}
                               {cardPhotos.length > 1 && (
                                 <>
                                   <button onClick={() => setCardPhotoIndex((prev) => (prev > 0 ? prev - 1 : cardPhotos.length - 1))} className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 transition">
@@ -606,10 +624,14 @@ export default function PeanutsMain({ session }: { session: any }) {
                           );
                         })()}
 
-                        <div onClick={() => setSelectedProfile(profiles[currentIndex])} className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-950 via-slate-950/70 to-transparent p-5 cursor-pointer">
+                        {/* Profile Info Overlay */}
+                        <div onClick={() => setSelectedProfile(profiles[currentIndex])} className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-slate-950 via-slate-950/80 to-transparent p-5 cursor-pointer">
                           <h2 className="text-xl font-bold text-white flex items-center justify-between">
-                            <span>{profiles[currentIndex].display_name}</span>
-                            <span className="text-xs text-slate-400 font-normal">ดูประวัติ ➔</span>
+                            <span className="flex items-center gap-1.5">
+                              {profiles[currentIndex].display_name}
+                              <BadgeCheck className="w-5 h-5 text-emerald-400 fill-emerald-400/20 shrink-0" />
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-normal">ดูประวัติ ➔</span>
                           </h2>
                           <p className="text-xs text-amber-400 font-medium mt-0.5">
                             {profiles[currentIndex].faculty} • {profiles[currentIndex].year} ({profiles[currentIndex].gender})
@@ -620,11 +642,32 @@ export default function PeanutsMain({ session }: { session: any }) {
                         </div>
                       </div>
 
-                      <div className="p-4 bg-slate-950 flex justify-center gap-6 border-t border-slate-900">
-                        <button onClick={handlePass} className="w-14 h-14 rounded-full bg-slate-900 border border-slate-800 text-slate-400 flex items-center justify-center hover:text-rose-400 transition">
+                      {/* --- ACTION BUTTONS (PASS / SUPER LIKE / LIKE) --- */}
+                      <div className="p-4 bg-slate-950 flex justify-center items-center gap-5 border-t border-slate-900">
+                        {/* PASS */}
+                        <button 
+                          onClick={handlePass} 
+                          className="w-13 h-13 rounded-full bg-slate-900 border border-slate-800 text-slate-400 flex items-center justify-center hover:text-rose-400 hover:border-rose-500/40 active:scale-90 transition shadow-lg"
+                          title="ข้าม"
+                        >
                           <X className="w-6 h-6" />
                         </button>
-                        <button onClick={handleLike} className="w-14 h-14 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center transition">
+
+                        {/* SUPER LIKE */}
+                        <button 
+                          onClick={() => handleLike(true)} 
+                          className="w-11 h-11 rounded-full bg-amber-500/10 border border-amber-500/40 text-amber-400 flex items-center justify-center hover:bg-amber-500 hover:text-slate-950 active:scale-90 transition shadow-lg shadow-amber-500/10"
+                          title="Super Like!"
+                        >
+                          <Star className="w-5 h-5 fill-amber-400" />
+                        </button>
+
+                        {/* LIKE */}
+                        <button 
+                          onClick={() => handleLike(false)} 
+                          className="w-13 h-13 rounded-full bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center active:scale-90 transition shadow-lg shadow-emerald-500/20"
+                          title="ถูกใจ"
+                        >
                           <Heart className="w-6 h-6 fill-slate-950" />
                         </button>
                       </div>
@@ -639,7 +682,7 @@ export default function PeanutsMain({ session }: { session: any }) {
                 </div>
               )}
 
-              {/* Tab 2: Matches */}
+              {/* TAB 2: MATCHES */}
               {tab === 'matches' && (
                 <div className="p-4 h-full flex flex-col">
                   <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
@@ -650,12 +693,15 @@ export default function PeanutsMain({ session }: { session: any }) {
                     <div className="space-y-2">
                       {matches.map((m) => (
                         <div key={m.id} onClick={() => setActiveChat(m)} className="p-3 bg-slate-900/80 border border-slate-800 rounded-2xl flex items-center gap-3 hover:border-emerald-500/40 cursor-pointer transition">
-                          <div className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden shrink-0 border border-slate-700">
+                          <div className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden shrink-0 border border-emerald-500/30">
                             <img src={m.photos?.[0] || m.avatar_url} alt="" className="w-full h-full object-cover" />
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="flex justify-between items-center">
-                              <h3 className="text-xs font-bold text-white truncate">{m.display_name}</h3>
+                              <h3 className="text-xs font-bold text-white flex items-center gap-1 truncate">
+                                <span>{m.display_name}</span>
+                                <BadgeCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                              </h3>
                               <span className="text-[10px] text-amber-400 shrink-0">{m.faculty}</span>
                             </div>
                             <p className="text-[11px] text-slate-400 mt-0.5 truncate">{m.lastMessage}</p>
@@ -672,13 +718,19 @@ export default function PeanutsMain({ session }: { session: any }) {
                 </div>
               )}
 
-              {/* Tab 3: Profile Form */}
+              {/* TAB 3: PROFILE FORM */}
               {tab === 'profile' && (
                 <div className="p-5 space-y-5">
-                  <h2 className="text-base font-bold text-white flex items-center gap-2">
-                    <User className="w-5 h-5 text-emerald-400" /> โปรไฟล์ของฉัน
-                  </h2>
+                  <div className="flex justify-between items-center">
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <User className="w-5 h-5 text-emerald-400" /> โปรไฟล์ของฉัน
+                    </h2>
+                    <span className="text-[10px] bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 px-2.5 py-1 rounded-full flex items-center gap-1 font-medium">
+                      <ShieldCheck className="w-3 h-3 text-emerald-400" /> นิสิตยืนยันตัวตนแล้ว
+                    </span>
+                  </div>
 
+                  {/* 3 Photo Slots */}
                   <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-3">
                     <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                       รูปโปรไฟล์ของคุณ (สูงสุด 3 รูป)
@@ -711,6 +763,7 @@ export default function PeanutsMain({ session }: { session: any }) {
                     </div>
                   </div>
 
+                  {/* Profile Edit Form */}
                   <form onSubmit={handleSaveProfile} className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 space-y-4">
                     <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">แก้ไขข้อมูลส่วนตัว</h3>
 
@@ -794,7 +847,7 @@ export default function PeanutsMain({ session }: { session: any }) {
                     <button
                       type="submit"
                       disabled={saving}
-                      className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg disabled:opacity-50"
+                      className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-emerald-500/15 disabled:opacity-50"
                     >
                       {saving ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
                     </button>
