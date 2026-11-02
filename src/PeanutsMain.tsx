@@ -57,7 +57,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
     photos: ['https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800']
   });
 
-  // --- โหลดข้อมูลโปรไฟล์ & การ์ดค้นหา & รายการ Match จริง ---
+  // --- 1. โหลดโปรไฟล์ การ์ดค้นหา และรายการ Match ---
   useEffect(() => {
     if (session?.user) {
       fetchProfile();
@@ -65,6 +65,50 @@ export default function PeanutsMain({ session }: { session?: any }) {
       fetchRealMatches();
     }
   }, [session]);
+
+  // --- 2. ระบบดึงแชทสด & Supabase Realtime Subscription ---
+  useEffect(() => {
+    if (!activeChat || !session?.user) return;
+
+    fetchMessages(activeChat.id);
+
+    // เปิดรับข้อความแชทใหม่แบบ Realtime
+    const channel = supabase
+      .channel('chat_messages')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+        },
+        (payload) => {
+          const newMsg = payload.new;
+          if (
+            (newMsg.sender_id === session.user.id && newMsg.receiver_id === activeChat.id) ||
+            (newMsg.sender_id === activeChat.id && newMsg.receiver_id === session.user.id)
+          ) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id === newMsg.id.toString())) return prev;
+              return [
+                ...prev,
+                {
+                  id: newMsg.id.toString(),
+                  sender: newMsg.sender_id === session.user.id ? 'me' : 'them',
+                  text: newMsg.content,
+                  time: new Date(newMsg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                }
+              ];
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [activeChat, session]);
 
   const fetchProfile = async () => {
     try {
@@ -92,12 +136,9 @@ export default function PeanutsMain({ session }: { session?: any }) {
     }
   };
 
-  // ดึงการ์ดคนอื่นที่กดบันทึกโปรไฟล์แล้ว และเรายังไม่ได้เคยปัด
   const fetchDiscoverProfiles = async () => {
     if (!session?.user) return;
-
     try {
-      // ดึงรายชื่อที่เราเคยปัดไปแล้ว
       const { data: swiped } = await supabase
         .from('likes')
         .select('to_user_id')
@@ -112,9 +153,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
         .not('full_name', 'is', null);
 
       if (data) {
-        // กรองเอาเฉพาะคนที่ยังไม่ได้ปัด
         const filtered = data.filter((p) => !swipedIds.includes(p.id));
-
         const realProfiles = filtered.map((p) => ({
           id: p.id,
           name: p.full_name || 'นิสิต KU KPS',
@@ -139,7 +178,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
     }
   };
 
-  // ดึงรายการคนที่แมตช์กันจริงๆ จากตาราง matches
   const fetchRealMatches = async () => {
     if (!session?.user) return;
     try {
@@ -164,7 +202,7 @@ export default function PeanutsMain({ session }: { session?: any }) {
             name: p.full_name || 'นิสิต KU KPS',
             faculty: p.faculty || 'ม.เกษตร',
             avatar: p.photos && p.photos.length > 0 ? p.photos[0] : 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?auto=format&fit=crop&q=80&w=800',
-            lastMessage: 'เริ่มส่งข้อความทักทายเลย! 👋',
+            lastMessage: 'กดเพื่อเปิดห้องแชทสด 💬',
             time: 'ตอนนี้'
           }));
           setRealMatches(list);
@@ -177,7 +215,47 @@ export default function PeanutsMain({ session }: { session?: any }) {
     }
   };
 
-  // --- ระบบสไวป์และการเช็ค Match สองฝ่าย ---
+  // ดึงข้อความเก่าจาก Supabase
+  const fetchMessages = async (partnerId: string) => {
+    if (!session?.user) return;
+    const myId = session.user.id;
+
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .or(`and(sender_id.eq.${myId},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${myId})`)
+      .order('created_at', { ascending: true });
+
+    if (data) {
+      const formatted = data.map((m) => ({
+        id: m.id.toString(),
+        sender: m.sender_id === myId ? ('me' as const) : ('them' as const),
+        text: m.content,
+        time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      }));
+      setMessages(formatted);
+    }
+  };
+
+  // ส่งข้อความจริงลง Supabase
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!inputMsg.trim() || !activeChat || !session?.user) return;
+
+    const textToSend = inputMsg.trim();
+    setInputMsg('');
+
+    const { error } = await supabase.from('messages').insert({
+      sender_id: session.user.id,
+      receiver_id: activeChat.id,
+      content: textToSend
+    });
+
+    if (error) {
+      alert('ส่งข้อความไม่สำเร็จ: ' + error.message);
+    }
+  };
+
   const handleSwipe = async (direction: 'pass' | 'like' | 'superlike') => {
     if (!currentProfile || !session?.user) return;
     setLastAction(direction);
@@ -186,14 +264,12 @@ export default function PeanutsMain({ session }: { session?: any }) {
     const myId = session.user.id;
     const targetId = currentProfile.id;
 
-    // 1. บันทึกการปัดลงตาราง likes
     await supabase.from('likes').upsert({
       from_user_id: myId,
       to_user_id: targetId,
       action: direction
     });
 
-    // 2. ถ้าปัด Like / Superlike ให้เช็คว่าอีกฝ่ายเคยปัด Like เราไหม
     if (direction === 'like' || direction === 'superlike') {
       const { data: mutualLike } = await supabase
         .from('likes')
@@ -204,14 +280,13 @@ export default function PeanutsMain({ session }: { session?: any }) {
         .maybeSingle();
 
       if (mutualLike) {
-        // อีกฝ่ายเคย Like เราไว้จริง -> บันทึกลงตาราง matches และแสดง Match Modal
         await supabase.from('matches').insert({
           user_1: myId,
           user_2: targetId
         });
 
         setMatchedUser(currentProfile);
-        fetchRealMatches(); // รีเฟรชหน้ารายชื่อแชททันที
+        fetchRealMatches();
       }
     }
 
@@ -221,7 +296,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
     }, 250);
   };
 
-  // --- บันทึกโปรไฟล์ ---
   const handleSaveProfile = async () => {
     if (!session?.user) return;
     const { error } = await supabase.from('profiles').upsert({
@@ -245,7 +319,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
     }
   };
 
-  // --- อัปโหลดรูปภาพ ---
   const handleUploadPhoto = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !session?.user) return;
@@ -274,7 +347,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
     });
   };
 
-  // --- ลบรูปภาพ ---
   const handleDeletePhoto = async (indexToDelete: number) => {
     const updatedPhotos = myProfile.photos.filter((_, idx) => idx !== indexToDelete);
     setMyProfile((prev) => ({ ...prev, photos: updatedPhotos }));
@@ -298,21 +370,6 @@ export default function PeanutsMain({ session }: { session?: any }) {
   const handlePrevPhoto = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (photoIndex > 0) setPhotoIndex(photoIndex - 1);
-  };
-
-  const handleSendMessage = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inputMsg.trim()) return;
-
-    const newMsg = {
-      id: Date.now().toString(),
-      sender: 'me' as const,
-      text: inputMsg,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-    };
-
-    setMessages((prev) => [...prev, newMsg]);
-    setInputMsg('');
   };
 
   return (
