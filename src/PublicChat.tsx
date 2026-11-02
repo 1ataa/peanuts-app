@@ -179,7 +179,7 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
                 type="text"
                 required
                 maxLength={20}
-                placeholder="เช่น DekKPS_68 / หมูหยอง"
+                placeholder="ตั้งชื่อเลย"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-900 border border-slate-800 rounded-xl text-sm text-white placeholder-slate-600 focus:outline-none focus:border-amber-500 transition"
