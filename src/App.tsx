@@ -3,6 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import PeanutsLanding from './PeanutsLanding';
 import AuthOTP from './AuthOTP';
 import PeanutsMain from './PeanutsMain';
+import PublicChat from './PublicChat';
 
 const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_pEF2JfLNNVNSqP2EkWfLQA_07HIg3xu';
@@ -11,7 +12,7 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 export default function App() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [hasStarted, setHasStarted] = useState(false);
+  const [viewMode, setViewMode] = useState<'landing' | 'otp' | 'public_chat'>('landing');
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -35,13 +36,26 @@ export default function App() {
     );
   }
 
+  // 1. ล็อกอินแล้วเข้าแอปหลัก
   if (session) {
     return <PeanutsMain session={session} />;
   }
 
-  if (!hasStarted) {
-    return <PeanutsLanding onStart={() => setHasStarted(true)} />;
+  // 2. ถ้าเลือกกดเข้าห้องแชทสาธารณะ
+  if (viewMode === 'public_chat') {
+    return <PublicChat onBack={() => setViewMode('landing')} />;
   }
 
-  return <AuthOTP onBack={() => setHasStarted(false)} />;
+  // 3. ถ้าเลือกกดเข้าหน้าล็อกอิน OTP
+  if (viewMode === 'otp') {
+    return <AuthOTP onBack={() => setViewMode('landing')} />;
+  }
+
+  // 4. หน้าแรกสุด (Landing Page)
+  return (
+    <PeanutsLanding 
+      onStart={() => setViewMode('otp')} 
+      onPublicChat={() => setViewMode('public_chat')} 
+    />
+  );
 }
