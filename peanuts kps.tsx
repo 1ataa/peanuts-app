@@ -155,8 +155,8 @@ export default function App() {
                   <input
                     type="text"
                     required
-                    maxLength={6}
-                    placeholder="123456"
+                    maxLength={8}
+                    placeholder="12345678"
                     value={otp}
                     onChange={(e) => setOtp(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-white text-center tracking-widest text-lg focus:outline-none focus:border-amber-500"
