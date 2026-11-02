@@ -129,7 +129,7 @@ export default function App() {
                   <input
                     type="email"
                     required
-                    placeholder="b68xxxxxxx@ku.th"
+                    placeholder="ใช้เมล@ku.th"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 bg-neutral-900 border border-neutral-700 rounded-xl text-white focus:outline-none focus:border-amber-500"
