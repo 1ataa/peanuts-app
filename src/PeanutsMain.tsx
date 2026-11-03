@@ -82,21 +82,16 @@ export default function PeanutsMain({
   const audioChunksRef = useRef<Blob[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // ตรวจสอบสิทธิ์การแจ้งเตือนทั้งจาก OneSignal และ Native Browser
+  // ตรวจสอบสถานะ Push Subscription
   useEffect(() => {
-    const checkNotificationStatus = async () => {
+    const checkNotificationStatus = () => {
       try {
-        if (typeof window !== 'undefined' && 'Notification' in window) {
-          if (Notification.permission === 'granted') {
-            setIsPushSubscribed(true);
-          }
-        }
+        const OneSignal = (window as any).OneSignal;
+        if (OneSignal?.User?.PushSubscription) {
+          const optedIn = OneSignal.User.PushSubscription.optedIn;
+          setIsPushSubscribed(!!optedIn);
 
-        if ((window as any).OneSignal) {
-          const optedIn = (window as any).OneSignal.User?.PushSubscription?.optedIn;
-          if (optedIn) setIsPushSubscribed(true);
-
-          (window as any).OneSignal.User?.PushSubscription?.addEventListener("change", (event: any) => {
+          OneSignal.User.PushSubscription.addEventListener("change", (event: any) => {
             setIsPushSubscribed(!!event.current?.optedIn);
           });
         }
@@ -107,45 +102,41 @@ export default function PeanutsMain({
     checkNotificationStatus();
   }, []);
 
-  // ฟังก์ชันสลับเปิด/ปิดการแจ้งเตือนพร้อมระบบสำรอง
+  // ฟังก์ชันสลับเปิด/ปิดการแจ้งเตือน พร้อมเด้ง Browser Native Prompt เมื่อยังไม่เคยอนุญาต
   const handleTogglePushNotification = async () => {
     try {
-      if (typeof window !== 'undefined' && 'Notification' in window) {
-        if (Notification.permission === 'denied') {
-          alert("เบราว์เซอร์ถูกบล็อกการแจ้งเตือนไว้ครับ! กรุณากดไอคอนแม่กุญแจหน้า URL แล้วเปลี่ยน Notifications เป็น 'Allow'");
-          return;
-        }
+      if (typeof window === 'undefined' || !('Notification' in window)) {
+        alert('เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน');
+        return;
+      }
 
-        // กรณีใช้ Native Notification Request
-        if (Notification.permission === 'default') {
-          const perm = await Notification.requestPermission();
-          if (perm === 'granted') {
-            setIsPushSubscribed(true);
-          }
+      // 1. สิทธิ์ถูกบล็อกไว้ -> แจ้งเตือนวิธีปลดบล็อก
+      if (Notification.permission === 'denied') {
+        alert("เบราว์เซอร์ถูกบล็อกการแจ้งเตือนไว้ครับ! กรุณากดไอคอนแม่กุญแจหน้า URL แล้วเปลี่ยนสิทธิ์การแจ้งเตือนเป็น 'Allow'");
+        return;
+      }
+
+      // 2. สิทธิ์ยังไม่ได้ตั้งค่า (Default) -> เด้งป็อบอัพ Allow/Block ของเบราว์เซอร์ทันทีเหมือนไมค์
+      if (Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          setIsPushSubscribed(false);
+          return;
         }
       }
 
+      // 3. สลับสถานะเปิด / ปิด การรับ Push ใน OneSignal
       const OneSignal = (window as any).OneSignal;
-      if (OneSignal) {
-        if (!isPushSubscribed) {
-          if (OneSignal.Notifications && OneSignal.Notifications.requestPermission) {
-            await OneSignal.Notifications.requestPermission();
-          } else if (OneSignal.User && OneSignal.User.PushSubscription) {
-            await OneSignal.User.PushSubscription.optIn();
-          } else if (OneSignal.Slidedown) {
-            await OneSignal.Slidedown.promptPush();
-          }
-          setIsPushSubscribed(true);
-        } else {
-          if (OneSignal.User && OneSignal.User.PushSubscription) {
-            await OneSignal.User.PushSubscription.optOut();
-          }
+      if (OneSignal?.User?.PushSubscription) {
+        if (isPushSubscribed) {
+          await OneSignal.User.PushSubscription.optOut();
           setIsPushSubscribed(false);
+        } else {
+          await OneSignal.User.PushSubscription.optIn();
+          setIsPushSubscribed(true);
         }
       } else {
-        if ('Notification' in window && Notification.permission === 'granted') {
-          setIsPushSubscribed(!isPushSubscribed);
-        }
+        setIsPushSubscribed(!isPushSubscribed);
       }
     } catch (err) {
       console.error("Toggle notification failed:", err);
@@ -966,7 +957,7 @@ export default function PeanutsMain({
           </div>
         )}
 
-        {/* --- ACTIVE MATCH CHAT VIEW (ตรึง Header ด้านบนไม่ให้หายเวลาเลื่อนแชท) --- */}
+        {/* --- ACTIVE MATCH CHAT VIEW --- */}
         {activeChat ? (
           <div className="h-full flex flex-col bg-slate-950 overflow-hidden">
             <header className="px-4 py-3 bg-[#121721] border-b border-slate-800 flex items-center gap-3 shrink-0 z-10">
