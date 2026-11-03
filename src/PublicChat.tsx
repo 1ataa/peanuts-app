@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
-  ArrowLeft, Send, Mic, Square, Loader2, Gamepad2, X, 
-  RefreshCw, Trophy, ShieldCheck, Plus, Sparkles 
+  ArrowLeft, Send, Mic, Square, Loader2, Gamepad2, X 
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_pEF2JfLNNVNSqP2EkWfLQA_07HIg3xu';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// --- BLACKJACK ENGINE CONSTANTS & TYPES ---
-type Card = { suit: '♠' | '♥' | '♦' | '♣'; value: string; numVal: number };
+// UUID สำรองสำหรับผู้ใช้ที่ไม่ได้ล็อกอินเพื่อป้องกัน Supabase Syntax Error
+const GUEST_UUID = '00000000-0000-0000-0000-000000000000';
 
+type Card = { suit: '♠' | '♥' | '♦' | '♣'; value: string; numVal: number };
 const SUITS: ('♠' | '♥' | '♦' | '♣')[] = ['♠', '♥', '♦', '♣'];
 const VALUES = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 
@@ -38,12 +38,13 @@ const calculateScore = (hand: Card[]) => {
   return score;
 };
 
-export default function PublicChat({ onBack }: { onBack: () => void }) {
-  // Chat States
+export default function PublicChat({ session, onBack }: { session?: any; onBack: () => void }) {
   const [messages, setMessages] = useState<any[]>([]);
   const [chatInput, setChatInput] = useState('');
   const [username, setUsername] = useState('');
   const [hasJoinedChat, setHasJoinedChat] = useState(false);
+  
+  // Voice Recording States
   const [isRecording, setIsRecording] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
 
@@ -64,7 +65,6 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
 
-  // Fetch Public Chat Messages
   useEffect(() => {
     fetchPublicMessages();
     const channel = supabase
@@ -72,7 +72,10 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const newMsg = payload.new as any;
         if (newMsg.receiver_id === 'PUBLIC_CHAT') {
-          setMessages((prev) => [...prev, newMsg]);
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === newMsg.id.toString())) return prev;
+            return [...prev, newMsg];
+          });
         }
       })
       .subscribe();
@@ -101,17 +104,133 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
     e.preventDefault();
     if (!chatInput.trim()) return;
 
-    const msg = chatInput.trim();
+    const textToSend = chatInput.trim();
     setChatInput('');
 
-    await supabase.from('messages').insert({
-      sender_id: username || 'ผู้เยี่ยมชม',
+    // จัดรูปแบบการเก็บชื่อผู้ส่งไว้ใน content: [NAME:username]:ข้อความ
+    const formattedContent = `[NAME:${username || 'ผู้เยี่ยมชม'}]:${textToSend}`;
+    const validSenderId = session?.user?.id || GUEST_UUID;
+
+    // Optimistic UI (แสดงข้อความทันทีบนหน้าจอ)
+    const optimisticMsg = {
+      id: Date.now().toString(),
+      sender_id: validSenderId,
       receiver_id: 'PUBLIC_CHAT',
-      content: msg
+      content: formattedContent,
+      created_at: new Date().toISOString()
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+
+    await supabase.from('messages').insert({
+      sender_id: validSenderId,
+      receiver_id: 'PUBLIC_CHAT',
+      content: formattedContent
     });
   };
 
-  // --- BLACKJACK LOGIC ---
+  // Audio Recording Functions
+  const getAudioConfig = () => {
+    const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (isIOS || MediaRecorder.isTypeSupported('audio/mp4')) {
+      return { mimeType: 'audio/mp4', ext: 'm4a', contentType: 'audio/mp4' };
+    }
+    if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+      return { mimeType: 'audio/webm;codecs=opus', ext: 'webm', contentType: 'audio/webm' };
+    }
+    return { mimeType: 'audio/webm', ext: 'webm', contentType: 'audio/webm' };
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const { mimeType } = getAudioConfig();
+      const options = mimeType ? { mimeType } : undefined;
+
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const { mimeType: configMime, ext, contentType } = getAudioConfig();
+        const recordedType = mediaRecorder.mimeType || configMime;
+        const audioBlob = new Blob(audioChunksRef.current, { type: recordedType });
+        stream.getTracks().forEach((track) => track.stop());
+        await uploadAndSendAudio(audioBlob, ext, contentType);
+      };
+
+      mediaRecorder.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert('ไม่สามารถเข้าถึงไมโครโฟนได้');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const uploadAndSendAudio = async (blob: Blob, ext: string, contentType: string) => {
+    setUploadingAudio(true);
+    const fileName = `public_${session?.user?.id || 'guest'}_${Date.now()}.${ext}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('audio-messages')
+      .upload(fileName, blob, { contentType, upsert: true });
+
+    if (uploadError) {
+      alert('ส่งข้อความเสียงไม่สำเร็จ: ' + uploadError.message);
+      setUploadingAudio(false);
+      return;
+    }
+
+    const { data } = supabase.storage.from('audio-messages').getPublicUrl(fileName);
+    const formattedContent = `[NAME:${username || 'ผู้เยี่ยมชม'}]:[VOICE]:${data.publicUrl}`;
+    const validSenderId = session?.user?.id || GUEST_UUID;
+
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: Date.now().toString(),
+        sender_id: validSenderId,
+        receiver_id: 'PUBLIC_CHAT',
+        content: formattedContent,
+        created_at: new Date().toISOString()
+      }
+    ]);
+
+    await supabase.from('messages').insert({
+      sender_id: validSenderId,
+      receiver_id: 'PUBLIC_CHAT',
+      content: formattedContent
+    });
+
+    setUploadingAudio(false);
+  };
+
+  const parseMessageContent = (rawContent: string) => {
+    let senderName = 'ผู้เยี่ยมชม';
+    let body = rawContent;
+
+    if (rawContent.startsWith('[NAME:')) {
+      const closingBracketIndex = rawContent.indexOf(']:');
+      if (closingBracketIndex !== -1) {
+        senderName = rawContent.substring(6, closingBracketIndex);
+        body = rawContent.substring(closingBracketIndex + 2);
+      }
+    }
+    return { senderName, body };
+  };
+
+  // --- BLACKJACK GAME ENGINE ---
   const startNewBlackjack = () => {
     setGameState('betting');
     setCurrentBet(0);
@@ -148,7 +267,6 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
     setDealerHand(dHand);
     setGameState('playing');
 
-    // Check Immediate Blackjack
     if (calculateScore(pHand) === 21) {
       endGame(pHand, dHand, 'BLACKJACK! คุณได้ 21 แต้มทันที 🎉', Math.floor(currentBet * 2.5));
     }
@@ -288,20 +406,21 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
           /* MESSAGES LIST */
           <main className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 text-xs bg-slate-950 font-sans">
             {messages.map((m) => {
-              const isMe = m.sender_id === username;
-              const isVoice = m.content.startsWith('[VOICE]:');
-              const audioUrl = isVoice ? m.content.replace('[VOICE]:', '') : '';
+              const { senderName, body } = parseMessageContent(m.content);
+              const isMe = senderName === username;
+              const isVoice = body.startsWith('[VOICE]:');
+              const audioUrl = isVoice ? body.replace('[VOICE]:', '') : '';
 
               return (
-                <div key={m.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                  <span className="text-[10px] text-slate-400 mb-1 px-1">{m.sender_id}</span>
+                <div key={m.id || Math.random()} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
+                  <span className="text-[10px] text-slate-400 mb-1 px-1">{senderName}</span>
                   <div className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl text-xs ${
                     isMe ? 'bg-amber-500 text-slate-950 font-medium' : 'bg-[#121721] text-white border border-slate-800'
                   }`}>
                     {isVoice ? (
                       <audio controls preload="metadata" playsInline src={audioUrl} className="h-8 max-w-[210px] my-0.5" />
                     ) : (
-                      <span className="break-all">{m.content}</span>
+                      <span className="break-all">{body}</span>
                     )}
                   </div>
                 </div>
@@ -311,10 +430,9 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
           </main>
         )}
 
-        {/* INPUT BAR WITH MINI-GAME BUTTON NEXT TO MIC */}
+        {/* INPUT BAR WITH MINI-GAME BUTTON & VOICE RECORDING */}
         {hasJoinedChat && (
           <form onSubmit={handleSendMessage} className="p-3 bg-[#121721] border-t border-slate-800 flex items-center gap-2 shrink-0">
-            {/* 🟢 ปุ่มเปิดมินิเกมข้างปุ่มไมค์ */}
             <button
               type="button"
               onClick={() => setShowGameModal(true)}
@@ -324,33 +442,47 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
               <Gamepad2 className="w-4 h-4" />
             </button>
 
-            <button
-              type="button"
-              className="w-9 h-9 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center shrink-0"
-              title="อัดเสียง"
-            >
-              <Mic className="w-4 h-4" />
-            </button>
+            {isRecording ? (
+              <div className="flex-1 flex items-center justify-between bg-rose-500/10 border border-rose-500/40 rounded-xl px-4 py-2 text-xs text-rose-400 animate-pulse">
+                <span>กำลังอัดเสียง...</span>
+                <button type="button" onClick={stopRecording} className="flex items-center gap-1 bg-rose-500 text-white font-bold px-3 py-1 rounded-lg text-[11px]">
+                  <Square className="w-3.5 h-3.5 fill-white" /> หยุดและส่ง
+                </button>
+              </div>
+            ) : uploadingAudio ? (
+              <div className="flex-1 flex items-center justify-center gap-2 bg-slate-950 border border-slate-800 rounded-xl py-2.5 text-xs text-amber-400">
+                <Loader2 className="w-4 h-4 animate-spin" /> กำลังส่งเสียง...
+              </div>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  onClick={startRecording}
+                  className="w-9 h-9 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center shrink-0"
+                  title="อัดเสียง"
+                >
+                  <Mic className="w-4 h-4" />
+                </button>
 
-            <input
-              type="text"
-              placeholder="พิมพ์ข้อความ..."
-              value={chatInput}
-              onChange={(e) => setChatInput(e.target.value)}
-              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400"
-            />
-            
-            <button type="submit" className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 font-bold flex items-center justify-center shrink-0">
-              <Send className="w-4 h-4" />
-            </button>
+                <input
+                  type="text"
+                  placeholder="พิมพ์ข้อความ..."
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-amber-400"
+                />
+                
+                <button type="submit" className="w-9 h-9 rounded-xl bg-amber-500 text-slate-950 font-bold flex items-center justify-center shrink-0">
+                  <Send className="w-4 h-4" />
+                </button>
+              </>
+            )}
           </form>
         )}
 
-        {/* --- MINI GAME MODAL (BLACKJACK UI EXPLICITLY MATCHING REFERENCE SCREENSHOTS) --- */}
+        {/* --- MINI GAME MODAL (BLACKJACK UI) --- */}
         {showGameModal && (
           <div className="absolute inset-0 bg-slate-950/95 z-50 flex flex-col justify-between p-3 backdrop-blur-md animate-in zoom-in-95 duration-200">
-            
-            {/* MINI GAME HEADER & CHIP BALANCE */}
             <div className="flex justify-between items-center z-10">
               <div className="flex items-center gap-2">
                 <div className="bg-emerald-500/20 border border-emerald-400/40 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
@@ -373,15 +505,11 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
               </button>
             </div>
 
-            {/* BLACKJACK TABLE VIEW (POLYGON TABLE) */}
             <div className="flex-1 my-2 bg-gradient-to-b from-slate-900 to-[#0d121c] border-2 border-slate-800 rounded-[32px] p-4 flex flex-col justify-between relative overflow-hidden shadow-2xl">
-              
-              {/* Hexagon Table Contour Line */}
               <div className="absolute inset-4 border border-emerald-500/20 rounded-[28px] pointer-events-none flex items-center justify-center">
                 <span className="text-[40px] font-black text-white/5 tracking-widest select-none">BLACKJACK</span>
               </div>
 
-              {/* GAME LOBBY PHASE */}
               {gameState === 'lobby' && (
                 <div className="flex-1 flex flex-col items-center justify-center gap-4 z-10">
                   <div className="w-16 h-20 bg-slate-800 border-2 border-slate-600 rounded-xl flex items-center justify-center shadow-2xl rotate-6">
@@ -397,7 +525,6 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
                 </div>
               )}
 
-              {/* GAME BETTING PHASE (UI MATCHING IMAGE 2) */}
               {gameState === 'betting' && (
                 <div className="flex-1 flex flex-col justify-between items-center z-10 py-2">
                   <div className="text-center">
@@ -405,7 +532,6 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
                     <h3 className="text-2xl font-black text-emerald-400 mt-0.5">${currentBet}</h3>
                   </div>
 
-                  {/* Circular Chip Selection (Matching Pure Poker Chips) */}
                   <div className="flex flex-wrap justify-center gap-3 max-w-[260px]">
                     {[
                       { val: 5, color: 'bg-rose-600 border-white text-white' },
@@ -424,7 +550,6 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
                     ))}
                   </div>
 
-                  {/* Action Controls for Betting */}
                   <div className="flex gap-2 w-full max-w-xs">
                     <button
                       onClick={clearBet}
@@ -448,11 +573,8 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
                 </div>
               )}
 
-              {/* GAMEPLAY & ENDED PHASE (UI MATCHING IMAGE 3) */}
               {(gameState === 'playing' || gameState === 'ended') && (
                 <div className="flex-1 flex flex-col justify-between z-10 py-1">
-                  
-                  {/* DEALER AREA */}
                   <div className="flex flex-col items-center">
                     <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">
                       DEALER ({gameState === 'playing' ? '?' : calculateScore(dealerHand)})
@@ -480,7 +602,6 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
                     </div>
                   </div>
 
-                  {/* CENTER ACTION BUTTONS / RESULT OVERLAY */}
                   <div className="flex flex-col items-center justify-center my-auto">
                     {gameState === 'playing' ? (
                       <div className="flex flex-col gap-2 w-32">
@@ -518,7 +639,6 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
                     )}
                   </div>
 
-                  {/* PLAYER AREA */}
                   <div className="flex flex-col items-center">
                     <div className="flex gap-2 justify-center mb-1">
                       {playerHand.map((c, i) => (
@@ -537,20 +657,16 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
                       PLAYER ({calculateScore(playerHand)}) • เดิมพัน ${currentBet}
                     </span>
                   </div>
-
                 </div>
               )}
-
             </div>
 
-            {/* MINI GAME FOOTER BAR */}
             <div className="flex justify-between items-center text-[10px] text-slate-400 px-2">
               <span>Pure Blackjack Table</span>
               <button onClick={() => setActiveMiniGame('blackjack')} className="text-amber-400 font-bold hover:underline">
                 มินิเกมเพิ่มเติม (เร็วๆ นี้)
               </button>
             </div>
-
           </div>
         )}
 
