@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { 
   Flame, Heart, X, MessageSquare, User, LogOut, Sparkles, Send, 
-  ArrowLeft, Camera, Loader2, Mic, Square, Plus, Trash2, 
+  ArrowLeft, Loader2, Mic, Square, Plus, Trash2, 
   ChevronLeft, ChevronRight, Star, ShieldCheck, SlidersHorizontal, Bell, RotateCcw
 } from 'lucide-react';
 
@@ -31,6 +31,10 @@ export default function PeanutsMain({ session }: { session: any }) {
   const [myProfile, setMyProfile] = useState<any>(null);
   const [historyStack, setHistoryStack] = useState<number[]>([]);
   
+  // Swipe Animation State
+  const [swipeDirection, setSwipeDirection] = useState<'like' | 'pass' | 'superlike' | 'rewind' | null>(null);
+  const [isAnimating, setIsAnimating] = useState(false);
+
   // Modals
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [matchedUser, setMatchedUser] = useState<any>(null);
@@ -221,6 +225,18 @@ export default function PeanutsMain({ session }: { session: any }) {
     }
   };
 
+  // Helper handling swipe action with animation
+  const triggerSwipe = (dir: 'like' | 'pass' | 'superlike', action: () => void) => {
+    if (isAnimating || currentIndex >= profiles.length) return;
+    setIsAnimating(true);
+    setSwipeDirection(dir);
+    setTimeout(() => {
+      action();
+      setSwipeDirection(null);
+      setIsAnimating(false);
+    }, 220);
+  };
+
   const handleLike = async (isSuperLike = false) => {
     if (currentIndex >= profiles.length) return;
     const targetUser = profiles[currentIndex];
@@ -247,18 +263,26 @@ export default function PeanutsMain({ session }: { session: any }) {
     fetchMatches();
   };
 
-  const handlePass = () => {
-    setHistoryStack((prev) => [...prev, currentIndex]);
-    setCurrentIndex((prev) => prev + 1);
-    setCardPhotoIndex(0);
+  const onLikeClick = (isSuperLike = false) => {
+    triggerSwipe(isSuperLike ? 'superlike' : 'like', () => handleLike(isSuperLike));
   };
 
-  const handleRewind = () => {
-    if (historyStack.length === 0) return;
+  const onPassClick = () => {
+    triggerSwipe('pass', () => {
+      setHistoryStack((prev) => [...prev, currentIndex]);
+      setCurrentIndex((prev) => prev + 1);
+      setCardPhotoIndex(0);
+    });
+  };
+
+  const onRewindClick = () => {
+    if (historyStack.length === 0 || isAnimating) return;
     const lastIndex = historyStack[historyStack.length - 1];
     setHistoryStack((prev) => prev.slice(0, -1));
     setCurrentIndex(lastIndex);
     setCardPhotoIndex(0);
+    setSwipeDirection('rewind');
+    setTimeout(() => setSwipeDirection(null), 250);
   };
 
   const fetchMessages = async (targetId: string) => {
@@ -361,7 +385,7 @@ export default function PeanutsMain({ session }: { session: any }) {
 
     setUploadingAudio(false);
   };
-// 1. ฟังก์ชันแปลงรูปภาพเป็น JPEG
+
   const convertToJpeg = (file: File): Promise<Blob> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
@@ -383,7 +407,6 @@ export default function PeanutsMain({ session }: { session: any }) {
     });
   };
 
-  // 2. ฟังก์ชัน handlePhotoUpload ใหม่
   const handlePhotoUpload = async (e: React.ChangeEvent<HTMLInputElement>, slotIndex: number) => {
     if (!e.target.files || e.target.files.length === 0) return;
     const originalFile = e.target.files[0];
@@ -408,6 +431,7 @@ export default function PeanutsMain({ session }: { session: any }) {
     setPhotos(newPhotos);
     setUploadingSlot(null);
   };
+
   const handleRemovePhoto = (slotIndex: number) => {
     const newPhotos = [...photos];
     newPhotos[slotIndex] = '';
@@ -638,13 +662,13 @@ export default function PeanutsMain({ session }: { session: any }) {
         ) : (
           <>
             {/* --- MAIN TABS CONTENT --- */}
-            <div className="flex-1 overflow-y-auto">
+            <div className={`flex-1 min-h-0 ${tab === 'discover' ? 'overflow-hidden' : 'overflow-y-auto'}`}>
               
               {/* TAB 1: DISCOVER */}
               {tab === 'discover' && (
-                <div className="p-4 h-full flex flex-col justify-between">
+                <div className="p-3 sm:p-4 h-full flex flex-col justify-between min-h-0 overflow-hidden">
                   {/* HEADER BAR */}
-                  <div className="flex justify-between items-center py-2 px-1">
+                  <div className="flex justify-between items-center py-1 px-1 shrink-0">
                     <div className="flex items-center gap-2.5">
                       <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
                         <Flame className="w-5 h-5 text-slate-950 fill-slate-950" />
@@ -678,8 +702,16 @@ export default function PeanutsMain({ session }: { session: any }) {
 
                   {/* CARD AREA */}
                   {profiles.length > 0 && currentIndex < profiles.length ? (
-                    <div className="flex-1 my-3 bg-[#121721] border border-slate-800/80 rounded-[32px] overflow-hidden shadow-2xl flex flex-col relative">
-                      <div className="flex-1 bg-slate-950 flex items-center justify-center relative group">
+                    <div className="flex-1 my-2 bg-[#121721] border border-slate-800/80 rounded-[28px] overflow-hidden shadow-2xl flex flex-col relative min-h-0">
+                      
+                      {/* CARD CONTAINER WITH SWIPE ANIMATION */}
+                      <div className={`flex-1 bg-slate-950 relative group min-h-0 transition-all duration-300 ease-out transform ${
+                        swipeDirection === 'like' ? 'translate-x-[120%] rotate-12 opacity-0' :
+                        swipeDirection === 'pass' ? '-translate-x-[120%] -rotate-12 opacity-0' :
+                        swipeDirection === 'superlike' ? '-translate-y-[120%] scale-95 opacity-0' :
+                        swipeDirection === 'rewind' ? 'animate-in zoom-in-95 duration-300' : ''
+                      }`}>
+                        
                         {(() => {
                           const currentCard = profiles[currentIndex];
                           const cardPhotos = Array.isArray(currentCard.photos) && currentCard.photos.length > 0 
@@ -690,22 +722,43 @@ export default function PeanutsMain({ session }: { session: any }) {
 
                           return (
                             <>
-                              {activePhoto ? (
-                                <img src={activePhoto} alt="Profile" className="w-full h-full object-cover" />
-                              ) : (
-                                <User className="w-24 h-24 text-slate-700" />
-                              )}
+                              <div className="absolute inset-0">
+                                {activePhoto ? (
+                                  <img src={activePhoto} alt="Profile" className="w-full h-full object-cover" />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-slate-900">
+                                    <User className="w-24 h-24 text-slate-700" />
+                                  </div>
+                                )}
+                              </div>
 
                               {/* Top Bar: Verified Badge */}
-                              <div className="absolute top-3 left-3 z-10">
+                              <div className="absolute top-3 left-3 z-10 pointer-events-none">
                                 <span className="px-2.5 py-1 rounded-full bg-slate-950/70 border border-emerald-500/40 text-emerald-400 text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
                                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> ยืนยันนิสิต @ku.th
                                 </span>
                               </div>
 
+                              {/* SWIPE OVERLAY BADGES */}
+                              {swipeDirection === 'like' && (
+                                <div className="absolute top-8 left-6 z-30 border-4 border-emerald-400 text-emerald-400 text-2xl font-black px-4 py-1 rounded-xl -rotate-12 uppercase tracking-wider backdrop-blur-sm bg-emerald-500/10 animate-in zoom-in-50 duration-150">
+                                  LIKE
+                                </div>
+                              )}
+                              {swipeDirection === 'pass' && (
+                                <div className="absolute top-8 right-6 z-30 border-4 border-rose-500 text-rose-500 text-2xl font-black px-4 py-1 rounded-xl rotate-12 uppercase tracking-wider backdrop-blur-sm bg-rose-500/10 animate-in zoom-in-50 duration-150">
+                                  NOPE
+                                </div>
+                              )}
+                              {swipeDirection === 'superlike' && (
+                                <div className="absolute bottom-24 inset-x-0 mx-auto w-max z-30 border-4 border-sky-400 text-sky-400 text-2xl font-black px-5 py-1 rounded-xl uppercase tracking-wider backdrop-blur-sm bg-sky-500/10 animate-in zoom-in-50 duration-150">
+                                  SUPER LIKE
+                                </div>
+                              )}
+
                               {/* Photo Dots */}
                               {cardPhotos.length > 1 && (
-                                <div className="absolute top-3 inset-x-0 flex justify-center gap-1.5 z-10 px-28">
+                                <div className="absolute top-3 inset-x-0 flex justify-center gap-1.5 z-10 px-24">
                                   {cardPhotos.map((_: any, idx: number) => (
                                     <div key={idx} className={`h-1 rounded-full flex-1 transition-all ${idx === cardPhotoIndex ? 'bg-white shadow' : 'bg-white/30'}`} />
                                   ))}
@@ -715,10 +768,10 @@ export default function PeanutsMain({ session }: { session: any }) {
                               {/* Photo Arrows */}
                               {cardPhotos.length > 1 && (
                                 <>
-                                  <button onClick={() => setCardPhotoIndex((prev) => (prev > 0 ? prev - 1 : cardPhotos.length - 1))} className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 transition">
+                                  <button onClick={() => setCardPhotoIndex((prev) => (prev > 0 ? prev - 1 : cardPhotos.length - 1))} className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 transition z-10">
                                     <ChevronLeft className="w-5 h-5" />
                                   </button>
-                                  <button onClick={() => setCardPhotoIndex((prev) => (prev < cardPhotos.length - 1 ? prev + 1 : 0))} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 transition">
+                                  <button onClick={() => setCardPhotoIndex((prev) => (prev < cardPhotos.length - 1 ? prev + 1 : 0))} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 transition z-10">
                                     <ChevronRight className="w-5 h-5" />
                                   </button>
                                 </>
@@ -728,29 +781,32 @@ export default function PeanutsMain({ session }: { session: any }) {
                         })()}
 
                         {/* Profile Info Overlay */}
-                        <div onClick={() => setSelectedProfile(profiles[currentIndex])} className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-[#0b0e14] via-[#0b0e14]/80 to-transparent p-5 cursor-pointer space-y-1.5">
-                          <h2 className="text-2xl font-black text-white flex items-center gap-2">
+                        <div 
+                          onClick={() => setSelectedProfile(profiles[currentIndex])} 
+                          className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-[#0b0e14] via-[#0b0e14]/80 to-transparent p-4 pb-3 cursor-pointer space-y-1 z-20"
+                        >
+                          <h2 className="text-xl font-black text-white flex items-center gap-2 drop-shadow">
                             <span>{profiles[currentIndex].display_name}</span>
-                            <span className="text-xl font-normal text-slate-300">{profiles[currentIndex].age || 20}</span>
+                            <span className="text-lg font-normal text-slate-300">{profiles[currentIndex].age || 20}</span>
                           </h2>
 
                           {/* คณะ • ชั้นปี (เพศ) */}
-                          <p className="text-xs text-emerald-400 font-medium flex items-center gap-1.5">
+                          <p className="text-[11px] text-emerald-400 font-medium flex items-center gap-1.5">
                             🎓 {profiles[currentIndex].faculty} • {profiles[currentIndex].year} ({profiles[currentIndex].gender || 'ไม่ระบุ'})
                           </p>
 
-                          <p className="text-xs text-slate-300 line-clamp-2 pt-1 font-sans">
+                          <p className="text-xs text-slate-300 line-clamp-2 pt-0.5 font-sans leading-snug">
                             {profiles[currentIndex].bio || 'ไม่มีข้อความแนะนำตัว'}
                           </p>
                         </div>
                       </div>
 
-                      {/* --- ACTION BUTTONS (X และ หัวใจ ใหญ่ w-14 h-14 เท่ากันเป๊ะ) --- */}
-                      <div className="py-4 px-6 bg-[#0b0e14] flex justify-center items-center gap-4 border-t border-slate-900">
+                      {/* --- ACTION BUTTONS --- */}
+                      <div className="py-3 px-6 bg-[#0b0e14] flex justify-center items-center gap-4 border-t border-slate-900 shrink-0 z-20">
                         {/* REWIND */}
                         <button 
-                          onClick={handleRewind}
-                          disabled={historyStack.length === 0}
+                          onClick={onRewindClick}
+                          disabled={historyStack.length === 0 || isAnimating}
                           className="w-11 h-11 rounded-full bg-[#121721] border border-slate-800 text-slate-400 hover:text-amber-400 flex items-center justify-center active:scale-90 transition disabled:opacity-30"
                           title="ย้อนกลับ"
                         >
@@ -759,7 +815,8 @@ export default function PeanutsMain({ session }: { session: any }) {
 
                         {/* PASS (X - ขนาดใหญ่ w-14 h-14) */}
                         <button 
-                          onClick={handlePass} 
+                          onClick={onPassClick} 
+                          disabled={isAnimating}
                           className="w-14 h-14 rounded-full bg-[#121721] border border-rose-500/30 text-rose-400 flex items-center justify-center hover:bg-rose-500/10 active:scale-90 transition shadow-lg"
                           title="ข้าม"
                         >
@@ -768,7 +825,8 @@ export default function PeanutsMain({ session }: { session: any }) {
 
                         {/* SUPER LIKE */}
                         <button 
-                          onClick={() => handleLike(true)} 
+                          onClick={() => onLikeClick(true)} 
+                          disabled={isAnimating}
                           className="w-11 h-11 rounded-full bg-[#121721] border border-sky-500/40 text-sky-400 flex items-center justify-center hover:bg-sky-500/10 active:scale-90 transition shadow-lg"
                           title="Super Like!"
                         >
@@ -777,7 +835,8 @@ export default function PeanutsMain({ session }: { session: any }) {
 
                         {/* LIKE (HEART - ขนาดใหญ่ w-14 h-14) */}
                         <button 
-                          onClick={() => handleLike(false)} 
+                          onClick={() => onLikeClick(false)} 
+                          disabled={isAnimating}
                           className="w-14 h-14 rounded-full bg-teal-400 text-slate-950 flex items-center justify-center hover:bg-teal-300 active:scale-90 transition shadow-xl shadow-teal-400/20"
                           title="ถูกใจ"
                         >
@@ -786,7 +845,7 @@ export default function PeanutsMain({ session }: { session: any }) {
                       </div>
                     </div>
                   ) : (
-                    <div className="flex-1 my-3 bg-[#121721] border border-slate-800/80 rounded-3xl flex flex-col items-center justify-center p-6 text-center">
+                    <div className="flex-1 my-2 bg-[#121721] border border-slate-800/80 rounded-3xl flex flex-col items-center justify-center p-6 text-center">
                       <Sparkles className="w-12 h-12 text-slate-600 mb-3" />
                       <p className="text-sm font-bold text-slate-300">ไม่มีโปรไฟล์เพิ่มเติมในขณะนี้</p>
                       <p className="text-xs text-slate-500 mt-1">ลองเปลี่ยนตัวกรอง "อยากปัดเจอเพศไหน" ในเมนูด้านบนเพื่อค้นหาใหม่ดูครับ</p>
@@ -822,7 +881,7 @@ export default function PeanutsMain({ session }: { session: any }) {
                       ))}
                     </div>
                   ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-xs text-slate-500 gap-2">
+                    <div className="flex-1 flex flex-col items-center justify-center text-xs text-slate-500 gap-2 py-16">
                       <Heart className="w-8 h-8 text-slate-700" />
                       <span>ยังไม่มีคู่ Match ในขณะนี้ ลองปัดการ์ดเพิ่มดูนะ!</span>
                     </div>
@@ -992,7 +1051,7 @@ export default function PeanutsMain({ session }: { session: any }) {
             </div>
 
             {/* Bottom Nav */}
-            <nav className="h-16 bg-[#0b0e14] border-t border-slate-900 grid grid-cols-3 items-center text-xs">
+            <nav className="h-16 bg-[#0b0e14] border-t border-slate-900 grid grid-cols-3 items-center text-xs shrink-0">
               <button onClick={() => setTab('discover')} className={`flex flex-col items-center gap-1 ${tab === 'discover' ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
                 <Flame className="w-5 h-5" />
                 <span className="text-[10px]">ค้นหา</span>
