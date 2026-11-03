@@ -75,39 +75,53 @@ export default function PeanutsMain({
   const [unreadCounts, setUnreadCounts] = useState<{ [userId: string]: number }>({});
   const [toastNotification, setToastNotification] = useState<{ senderName: string; text: string; senderObj: any } | null>(null);
   
-  // OneSignal Push Subscribed State
+  // Push Notification Subscribed State
   const [isPushSubscribed, setIsPushSubscribed] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // เช็คสถานะ OneSignal Push Subscription เมื่อโหลดคอมโพเนนต์
+  // ตรวจสอบสิทธิ์การแจ้งเตือนทั้งจาก OneSignal และ Native Browser
   useEffect(() => {
-    const checkOneSignalStatus = async () => {
+    const checkNotificationStatus = async () => {
       try {
+        if (typeof window !== 'undefined' && 'Notification' in window) {
+          if (Notification.permission === 'granted') {
+            setIsPushSubscribed(true);
+          }
+        }
+
         if ((window as any).OneSignal) {
           const optedIn = (window as any).OneSignal.User?.PushSubscription?.optedIn;
-          setIsPushSubscribed(!!optedIn);
+          if (optedIn) setIsPushSubscribed(true);
 
           (window as any).OneSignal.User?.PushSubscription?.addEventListener("change", (event: any) => {
-            setIsPushSubscribed(event.current.optedIn);
+            setIsPushSubscribed(!!event.current?.optedIn);
           });
         }
       } catch (e) {
-        console.error("OneSignal status check error:", e);
+        console.error("Notification status check error:", e);
       }
     };
-    checkOneSignalStatus();
+    checkNotificationStatus();
   }, []);
 
-  // ฟังก์ชันกดเปิด/ปิดแจ้งเตือน OneSignal
+  // ฟังก์ชันสลับเปิด/ปิดการแจ้งเตือนพร้อมระบบสำรอง
   const handleTogglePushNotification = async () => {
     try {
       if (typeof window !== 'undefined' && 'Notification' in window) {
         if (Notification.permission === 'denied') {
-          alert("เบราว์เซอร์ถูกบล็อกการแจ้งเตือนไว้ครับ! กรุณากดไอคอนแม่กุญแจหน้าชื่อเว็บ (URL) แล้วเปลี่ยนสิทธิ์การแจ้งเตือนเป็น 'อนุญาต' (Allow)");
+          alert("เบราว์เซอร์ถูกบล็อกการแจ้งเตือนไว้ครับ! กรุณากดไอคอนแม่กุญแจหน้า URL แล้วเปลี่ยน Notifications เป็น 'Allow'");
           return;
+        }
+
+        // กรณีใช้ Native Notification Request
+        if (Notification.permission === 'default') {
+          const perm = await Notification.requestPermission();
+          if (perm === 'granted') {
+            setIsPushSubscribed(true);
+          }
         }
       }
 
@@ -116,25 +130,28 @@ export default function PeanutsMain({
         if (!isPushSubscribed) {
           if (OneSignal.Notifications && OneSignal.Notifications.requestPermission) {
             await OneSignal.Notifications.requestPermission();
+          } else if (OneSignal.User && OneSignal.User.PushSubscription) {
+            await OneSignal.User.PushSubscription.optIn();
           } else if (OneSignal.Slidedown) {
             await OneSignal.Slidedown.promptPush();
           }
+          setIsPushSubscribed(true);
         } else {
           if (OneSignal.User && OneSignal.User.PushSubscription) {
             await OneSignal.User.PushSubscription.optOut();
           }
+          setIsPushSubscribed(false);
         }
-        const optedIn = OneSignal.User?.PushSubscription?.optedIn;
-        setIsPushSubscribed(!!optedIn);
       } else {
-        alert("OneSignal SDK ยังไม่พร้อมใช้งานบนเบราว์เซอร์นี้");
+        if ('Notification' in window && Notification.permission === 'granted') {
+          setIsPushSubscribed(!isPushSubscribed);
+        }
       }
     } catch (err) {
       console.error("Toggle notification failed:", err);
     }
   };
 
-  // 🟢 ฟังก์ชันส่ง Push Notification ตรงเข้ามือถือปลายทางผ่าน OneSignal REST API
   const sendPushToDevice = async (targetUserId: string, title: string, messageText: string) => {
     try {
       const { data: targetProfile } = await supabase
@@ -670,7 +687,6 @@ export default function PeanutsMain({
     setUploadingSlot(null);
   };
 
-  // 🟢 ฟังก์ชันส่งรูปภาพในห้องแชทแมทส่วนตัว
   const handleChatImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0 || !activeChat) return;
     const originalFile = e.target.files[0];
@@ -950,10 +966,10 @@ export default function PeanutsMain({
           </div>
         )}
 
-        {/* --- ACTIVE MATCH CHAT VIEW --- */}
+        {/* --- ACTIVE MATCH CHAT VIEW (ตรึง Header ด้านบนไม่ให้หายเวลาเลื่อนแชท) --- */}
         {activeChat ? (
-          <div className="flex-1 flex flex-col bg-slate-950">
-            <header className="px-4 py-3 bg-[#121721] border-b border-slate-800 flex items-center gap-3">
+          <div className="h-full flex flex-col bg-slate-950 overflow-hidden">
+            <header className="px-4 py-3 bg-[#121721] border-b border-slate-800 flex items-center gap-3 shrink-0 z-10">
               <button onClick={() => setActiveChat(null)} className="p-1 text-slate-400 hover:text-white shrink-0">
                 <ArrowLeft className="w-5 h-5" />
               </button>
@@ -978,7 +994,7 @@ export default function PeanutsMain({
               </div>
             </header>
 
-            <main className="flex-1 overflow-y-auto p-4 flex flex-col gap-2.5 font-sans text-xs bg-slate-950">
+            <main className="flex-1 overflow-y-auto min-h-0 p-4 flex flex-col gap-2.5 font-sans text-xs bg-slate-950">
               {messages.map((m) => {
                 const isMe = m.sender_id === session.user.id;
                 const isVoice = m.content.startsWith('[VOICE]:');
@@ -1005,7 +1021,7 @@ export default function PeanutsMain({
               <div ref={chatEndRef} />
             </main>
 
-            <form onSubmit={handleSendMessage} className="p-3 bg-[#121721] border-t border-slate-800 flex items-center gap-2">
+            <form onSubmit={handleSendMessage} className="p-3 bg-[#121721] border-t border-slate-800 flex items-center gap-2 shrink-0 z-10">
               {isRecording ? (
                 <div className="flex-1 flex items-center justify-between bg-rose-500/10 border border-rose-500/40 rounded-xl px-4 py-2 text-xs text-rose-400 animate-pulse">
                   <span>กำลังอัดเสียง...</span>
@@ -1019,7 +1035,6 @@ export default function PeanutsMain({
                 </div>
               ) : (
                 <>
-                  {/* ปุ่มส่งรูปภาพในแชท (วางข้างปุ่มไมค์) */}
                   <label className="w-9 h-9 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-emerald-400 flex items-center justify-center shrink-0 cursor-pointer transition">
                     <ImageIcon className="w-4 h-4" />
                     <input 
@@ -1031,7 +1046,6 @@ export default function PeanutsMain({
                     />
                   </label>
 
-                  {/* ปุ่มอัดเสียง */}
                   <button type="button" onClick={startRecording} className="w-9 h-9 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center shrink-0">
                     <Mic className="w-4 h-4" />
                   </button>
