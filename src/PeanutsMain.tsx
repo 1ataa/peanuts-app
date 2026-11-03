@@ -34,6 +34,7 @@ export default function PeanutsMain({
   const [profiles, setProfiles] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [cardPhotoIndex, setCardPhotoIndex] = useState(0);
+  const [detailPhotoIndex, setDetailPhotoIndex] = useState(0);
   const [myProfile, setMyProfile] = useState<any>(null);
   const [historyStack, setHistoryStack] = useState<number[]>([]);
   
@@ -69,37 +70,56 @@ export default function PeanutsMain({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
-// 🟢 เพิ่มฟังก์ชันดึงรูปภาพและดึงโปรไฟล์ล่าสุด (วางแทรกตรงนี้)
+
+  // 🟢 Helper ป้องกัน Crash เรื่องรูปภาพใน Database
   const getProfilePhotos = (profile: any) => {
     if (!profile) return [];
     const list: string[] = [];
-    if (Array.isArray(profile.photos)) {
-      profile.photos.forEach((p: string) => {
+    
+    let rawPhotos = profile.photos;
+    if (typeof rawPhotos === 'string') {
+      try {
+        rawPhotos = JSON.parse(rawPhotos);
+      } catch (e) {
+        if (rawPhotos.trim() !== '') list.push(rawPhotos.trim());
+      }
+    }
+    
+    if (Array.isArray(rawPhotos)) {
+      rawPhotos.forEach((p: any) => {
         if (p && typeof p === 'string' && p.trim() !== '') {
           list.push(p.trim());
         }
       });
     }
-    if (list.length === 0 && profile.avatar_url && profile.avatar_url.trim() !== '') {
+    
+    if (list.length === 0 && profile.avatar_url && typeof profile.avatar_url === 'string' && profile.avatar_url.trim() !== '') {
       list.push(profile.avatar_url.trim());
     }
+    
     return list;
   };
 
   const handleOpenProfileDetail = async (userProfile: any) => {
+    if (!userProfile) return;
     setDetailPhotoIndex(0);
-    const { data } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', userProfile.id)
-      .single();
+    try {
+      const { data } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', userProfile.id)
+        .single();
 
-    if (data) {
-      setSelectedProfile(data);
-    } else {
+      if (data) {
+        setSelectedProfile(data);
+      } else {
+        setSelectedProfile(userProfile);
+      }
+    } catch (err) {
       setSelectedProfile(userProfile);
     }
   };
+
   useEffect(() => {
     if (session?.user) {
       loadMyProfile();
@@ -261,7 +281,6 @@ export default function PeanutsMain({
     }
   };
 
-  // Helper handling swipe action with animation
   const triggerSwipe = (dir: 'like' | 'pass' | 'superlike', action: () => void) => {
     if (isAnimating || currentIndex >= profiles.length) return;
     setIsAnimating(true);
@@ -596,7 +615,7 @@ export default function PeanutsMain({
           </div>
         )}
 
-     {/* 🟢 SELECTED PROFILE DETAIL MODAL (ปรับให้รองรับรูปทั้งหมดและ Bio) */}
+        {/* --- SELECTED PROFILE DETAIL MODAL (ดูโปรไฟล์และรูปทั้งหมด) --- */}
         {selectedProfile && (
           <div className="absolute inset-0 bg-slate-950/95 z-50 flex flex-col overflow-y-auto p-4 backdrop-blur-md">
             <button 
@@ -690,10 +709,11 @@ export default function PeanutsMain({
             </div>
           </div>
         )}
+
         {/* --- ACTIVE MATCH CHAT VIEW --- */}
         {activeChat ? (
           <div className="flex-1 flex flex-col bg-slate-950">
-          {/* 🟢 แก้ไข Header ให้กดดูโปรไฟล์ล่าสุดได้ */}
+            {/* Clickable Chat Header */}
             <header className="px-4 py-3 bg-[#121721] border-b border-slate-800 flex items-center gap-3">
               <button onClick={() => setActiveChat(null)} className="p-1 text-slate-400 hover:text-white shrink-0">
                 <ArrowLeft className="w-5 h-5" />
@@ -828,10 +848,7 @@ export default function PeanutsMain({
                         
                         {(() => {
                           const currentCard = profiles[currentIndex];
-                          const cardPhotos = Array.isArray(currentCard.photos) && currentCard.photos.length > 0 
-                            ? currentCard.photos.filter((p: string) => p !== '')
-                            : [currentCard.avatar_url];
-
+                          const cardPhotos = getProfilePhotos(currentCard);
                           const activePhoto = cardPhotos[cardPhotoIndex] || cardPhotos[0];
 
                           return (
@@ -896,15 +913,14 @@ export default function PeanutsMain({
 
                         {/* Profile Info Overlay */}
                         <div 
-                          onClick={() => setSelectedProfile(profiles[currentIndex])} 
-                          className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-[#0b0e14] via-[#0b0e14]/80 to-transparent p-4 pb-3 cursor-pointer space-y-1 z-20"
+                          onClick={() => handleOpenProfileDetail(profiles[currentIndex])} 
+                          className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-[#0b0e14] via-[#0b0e14]/80 to-transparent p-4 pb-3 cursor-pointer space-y-1 z-20 hover:opacity-90 transition"
                         >
                           <h2 className="text-xl font-black text-white flex items-center gap-2 drop-shadow">
                             <span>{profiles[currentIndex].display_name}</span>
                             <span className="text-lg font-normal text-slate-300">{profiles[currentIndex].age || 20}</span>
                           </h2>
 
-                          {/* คณะ • ชั้นปี (เพศ) */}
                           <p className="text-[11px] text-emerald-400 font-medium flex items-center gap-1.5">
                             🎓 {profiles[currentIndex].faculty} • {profiles[currentIndex].year} ({profiles[currentIndex].gender || 'ไม่ระบุ'})
                           </p>
@@ -927,7 +943,7 @@ export default function PeanutsMain({
                           <RotateCcw className="w-4 h-4" />
                         </button>
 
-                        {/* PASS (X - ขนาดใหญ่ w-14 h-14) */}
+                        {/* PASS */}
                         <button 
                           onClick={onPassClick} 
                           disabled={isAnimating}
@@ -947,7 +963,7 @@ export default function PeanutsMain({
                           <Star className="w-5 h-5 fill-sky-400" />
                         </button>
 
-                        {/* LIKE (HEART - ขนาดใหญ่ w-14 h-14) */}
+                        {/* LIKE */}
                         <button 
                           onClick={() => onLikeClick(false)} 
                           disabled={isAnimating}
@@ -978,11 +994,24 @@ export default function PeanutsMain({
                   {matches.length > 0 ? (
                     <div className="space-y-2">
                       {matches.map((m) => (
-                        <div key={m.id} onClick={() => setActiveChat(m)} className="p-3 bg-[#121721] border border-slate-800 rounded-2xl flex items-center gap-3 hover:border-emerald-500/40 cursor-pointer transition">
-                          <div className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden shrink-0 border border-emerald-500/30">
-                            <img src={m.photos?.[0] || m.avatar_url} alt="" className="w-full h-full object-cover" />
+                        <div 
+                          key={m.id} 
+                          className="p-3 bg-[#121721] border border-slate-800 rounded-2xl flex items-center gap-3 hover:border-emerald-500/40 transition"
+                        >
+                          {/* 🟢 กดที่รูปโปรไฟล์เพื่อเปิดดูรูปทั้งหมดและ Bio */}
+                          <div 
+                            onClick={() => handleOpenProfileDetail(m)} 
+                            className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden shrink-0 border border-emerald-500/30 cursor-pointer hover:opacity-80 transition relative group"
+                            title="คลิกดูโปรไฟล์"
+                          >
+                            <img src={getProfilePhotos(m)[0] || m.avatar_url} alt="" className="w-full h-full object-cover" />
                           </div>
-                          <div className="flex-1 min-w-0">
+
+                          {/* 🟢 กดที่ชื่อ/ข้อความเพื่อเปิดห้องแชท */}
+                          <div 
+                            onClick={() => setActiveChat(m)} 
+                            className="flex-1 min-w-0 cursor-pointer"
+                          >
                             <div className="flex justify-between items-center">
                               <h3 className="text-xs font-bold text-white flex items-center gap-1 truncate">
                                 <span>{m.display_name}</span>
@@ -991,6 +1020,15 @@ export default function PeanutsMain({
                             </div>
                             <p className="text-[11px] text-slate-400 mt-0.5 truncate">{m.lastMessage}</p>
                           </div>
+
+                          {/* 🟢 ปุ่มไอคอนดูโปรไฟล์ */}
+                          <button
+                            onClick={() => handleOpenProfileDetail(m)}
+                            className="p-2 text-slate-400 hover:text-emerald-400 rounded-xl hover:bg-slate-900 transition shrink-0"
+                            title="ดูโปรไฟล์"
+                          >
+                            <User className="w-4 h-4" />
+                          </button>
                         </div>
                       ))}
                     </div>
@@ -1153,23 +1191,23 @@ export default function PeanutsMain({
                     </button>
                   </form>
 
-                {/* 🟢 ปุ่มเข้าห้องพูดคุยสาธารณะ (วางแทรกตรงนี้) */}
-<button
-  type="button"
-  onClick={onOpenPublicChat}
-  className="w-full py-3 bg-[#121721] border border-amber-500/40 text-amber-400 font-bold text-xs rounded-2xl flex items-center justify-center gap-2 hover:bg-amber-500/10 active:scale-95 transition shadow-lg shadow-amber-500/5"
->
-  <MessageSquare className="w-4 h-4 text-amber-400" /> 
-  ห้องพูดคุยสาธารณะ & ข้อเสนอแนะ 💬
-</button>
+                  {/* ปุ่มเข้าห้องพูดคุยสาธารณะ */}
+                  <button
+                    type="button"
+                    onClick={onOpenPublicChat}
+                    className="w-full py-3 bg-[#121721] border border-amber-500/40 text-amber-400 font-bold text-xs rounded-2xl flex items-center justify-center gap-2 hover:bg-amber-500/10 active:scale-95 transition shadow-lg shadow-amber-500/5"
+                  >
+                    <MessageSquare className="w-4 h-4 text-amber-400" /> 
+                    ห้องพูดคุยสาธารณะ & ข้อเสนอแนะ 💬
+                  </button>
 
-{/* ปุ่มออกจากระบบเดิม */}
-<button
-  onClick={() => supabase.auth.signOut()}
-  className="w-full py-3 bg-[#121721] border border-slate-800 text-rose-400 font-bold text-xs rounded-2xl flex items-center justify-center gap-2"
->
-  <LogOut className="w-4 h-4" /> ออกจากระบบ
-</button>
+                  {/* ปุ่มออกจากระบบ */}
+                  <button
+                    onClick={() => supabase.auth.signOut()}
+                    className="w-full py-3 bg-[#121721] border border-slate-800 text-rose-400 font-bold text-xs rounded-2xl flex items-center justify-center gap-2 hover:bg-rose-500/10 transition"
+                  >
+                    <LogOut className="w-4 h-4" /> ออกจากระบบ
+                  </button>
                 </div>
               )}
 
