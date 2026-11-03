@@ -69,7 +69,37 @@ export default function PeanutsMain({
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
+// 🟢 เพิ่มฟังก์ชันดึงรูปภาพและดึงโปรไฟล์ล่าสุด (วางแทรกตรงนี้)
+  const getProfilePhotos = (profile: any) => {
+    if (!profile) return [];
+    const list: string[] = [];
+    if (Array.isArray(profile.photos)) {
+      profile.photos.forEach((p: string) => {
+        if (p && typeof p === 'string' && p.trim() !== '') {
+          list.push(p.trim());
+        }
+      });
+    }
+    if (list.length === 0 && profile.avatar_url && profile.avatar_url.trim() !== '') {
+      list.push(profile.avatar_url.trim());
+    }
+    return list;
+  };
 
+  const handleOpenProfileDetail = async (userProfile: any) => {
+    setDetailPhotoIndex(0);
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userProfile.id)
+      .single();
+
+    if (data) {
+      setSelectedProfile(data);
+    } else {
+      setSelectedProfile(userProfile);
+    }
+  };
   useEffect(() => {
     if (session?.user) {
       loadMyProfile();
@@ -566,48 +596,126 @@ export default function PeanutsMain({
           </div>
         )}
 
-        {/* --- SELECTED PROFILE DETAIL MODAL --- */}
+     {/* 🟢 SELECTED PROFILE DETAIL MODAL (ปรับให้รองรับรูปทั้งหมดและ Bio) */}
         {selectedProfile && (
-          <div className="absolute inset-0 bg-slate-950/90 z-40 flex flex-col overflow-y-auto p-4 backdrop-blur-md">
-            <button onClick={() => setSelectedProfile(null)} className="self-start text-xs text-slate-400 hover:text-white flex items-center gap-1 mb-3">
+          <div className="absolute inset-0 bg-slate-950/95 z-50 flex flex-col overflow-y-auto p-4 backdrop-blur-md">
+            <button 
+              onClick={() => setSelectedProfile(null)} 
+              className="self-start text-xs text-slate-400 hover:text-white flex items-center gap-1 mb-3 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800"
+            >
               <ArrowLeft className="w-4 h-4" /> ย้อนกลับ
             </button>
+
             <div className="bg-[#121721] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex-1 flex flex-col">
-              <div className="h-80 bg-slate-950 relative">
-                <img src={selectedProfile.photos?.[0] || selectedProfile.avatar_url} alt="" className="w-full h-full object-cover" />
+              {/* Profile Image Viewport */}
+              <div className="h-96 bg-slate-950 relative group shrink-0">
+                {(() => {
+                  const detailPhotos = getProfilePhotos(selectedProfile);
+                  const activePhoto = detailPhotos[detailPhotoIndex] || detailPhotos[0];
+
+                  return (
+                    <>
+                      {activePhoto ? (
+                        <img src={activePhoto} alt="Profile" className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-slate-900 text-slate-600 gap-2">
+                          <User className="w-20 h-20" />
+                          <span className="text-xs text-slate-500">ไม่มีรูปภาพโปรไฟล์</span>
+                        </div>
+                      )}
+
+                      {/* Photo Dots */}
+                      {detailPhotos.length > 1 && (
+                        <div className="absolute top-3 inset-x-0 flex justify-center gap-1.5 z-10 px-12">
+                          {detailPhotos.map((_: any, idx: number) => (
+                            <div 
+                              key={idx} 
+                              className={`h-1 rounded-full flex-1 transition-all ${idx === detailPhotoIndex ? 'bg-white shadow' : 'bg-white/30'}`} 
+                            />
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Photo Navigation Arrows */}
+                      {detailPhotos.length > 1 && (
+                        <>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDetailPhotoIndex((prev) => (prev > 0 ? prev - 1 : detailPhotos.length - 1));
+                            }} 
+                            className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-950/60 text-white hover:bg-slate-950 transition z-10"
+                          >
+                            <ChevronLeft className="w-5 h-5" />
+                          </button>
+                          <button 
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setDetailPhotoIndex((prev) => (prev < detailPhotos.length - 1 ? prev + 1 : 0));
+                            }} 
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-950/60 text-white hover:bg-slate-950 transition z-10"
+                          >
+                            <ChevronRight className="w-5 h-5" />
+                          </button>
+                        </>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
-              <div className="p-5 space-y-3">
-                <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                  <span>{selectedProfile.display_name} {selectedProfile.age || 20}</span>
+
+              {/* Profile Details */}
+              <div className="p-5 space-y-3 flex-1 overflow-y-auto">
+                <h2 className="text-xl font-black text-white flex items-center gap-2">
+                  <span>{selectedProfile.display_name}</span>
+                  <span className="text-lg font-normal text-slate-300">{selectedProfile.age || 20}</span>
                 </h2>
+
                 <div className="flex flex-wrap gap-2 text-xs">
-                  <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full flex items-center gap-1">
-                    🎓 {selectedProfile.faculty} • {selectedProfile.year} ({selectedProfile.gender || 'ไม่ระบุ'})
+                  <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full flex items-center gap-1 font-medium">
+                    🎓 {selectedProfile.faculty || 'ไม่ระบุ'} • {selectedProfile.year || 'ชั้นปีที่ 1'} ({selectedProfile.gender || 'ไม่ระบุ'})
+                  </span>
+                  <span className="px-2.5 py-1 rounded-full bg-slate-900 border border-emerald-500/40 text-emerald-400 text-[10px] font-medium flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> ยืนยันนิสิต @ku.th
                   </span>
                 </div>
-                <p className="text-xs text-slate-300 leading-relaxed pt-2 border-t border-slate-800/80">
-                  {selectedProfile.bio || 'ไม่ได้ระบุข้อความแนะนำตัว'}
-                </p>
+
+                <div className="pt-3 border-t border-slate-800/80">
+                  <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1">เกี่ยวกับฉัน</h4>
+                  <p className="text-xs text-slate-300 leading-relaxed font-sans whitespace-pre-line">
+                    {selectedProfile.bio || 'ไม่ได้ระบุข้อความแนะนำตัว'}
+                  </p>
+                </div>
               </div>
             </div>
           </div>
         )}
-
         {/* --- ACTIVE MATCH CHAT VIEW --- */}
         {activeChat ? (
           <div className="flex-1 flex flex-col bg-slate-950">
+          {/* 🟢 แก้ไข Header ให้กดดูโปรไฟล์ล่าสุดได้ */}
             <header className="px-4 py-3 bg-[#121721] border-b border-slate-800 flex items-center gap-3">
-              <button onClick={() => setActiveChat(null)} className="p-1 text-slate-400 hover:text-white">
+              <button onClick={() => setActiveChat(null)} className="p-1 text-slate-400 hover:text-white shrink-0">
                 <ArrowLeft className="w-5 h-5" />
               </button>
-              <div className="w-9 h-9 rounded-full bg-slate-800 overflow-hidden border border-emerald-500/40">
-                <img src={activeChat.photos?.[0] || activeChat.avatar_url} alt="" className="w-full h-full object-cover" />
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-white flex items-center gap-1">
-                  <span>{activeChat.display_name}</span>
-                </h3>
-                <span className="text-[10px] text-amber-400">{activeChat.faculty}</span>
+              
+              <div 
+                onClick={() => handleOpenProfileDetail(activeChat)}
+                className="flex items-center gap-3 cursor-pointer flex-1 min-w-0 hover:opacity-80 transition"
+              >
+                <div className="w-9 h-9 rounded-full bg-slate-800 overflow-hidden border border-emerald-500/40 shrink-0">
+                  <img 
+                    src={getProfilePhotos(activeChat)[0] || activeChat.avatar_url} 
+                    alt="" 
+                    className="w-full h-full object-cover" 
+                  />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-xs font-bold text-white flex items-center gap-1 truncate">
+                    <span>{activeChat.display_name}</span>
+                  </h3>
+                  <span className="text-[10px] text-amber-400 truncate block">{activeChat.faculty}</span>
+                </div>
               </div>
             </header>
 
