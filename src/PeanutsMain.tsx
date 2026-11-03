@@ -102,8 +102,55 @@ export default function PeanutsMain({
     checkNotificationStatus();
   }, []);
 
-  // ฟังก์ชันสลับเปิด/ปิดการแจ้งเตือน พร้อมเด้ง Browser Native Prompt เมื่อยังไม่เคยอนุญาต
+// ฟังก์ชันสลับเปิด/ปิดการแจ้งเตือน (รองรับ Safari บน iOS/iPadOS)
   const handleTogglePushNotification = async () => {
+    try {
+      const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
+
+      // ถ้าเป็น iOS/iPadOS แล้วเล่นใน Safari ปกติ (ยังไม่ได้เพิ่มลงหน้าโฮม)
+      if (isIOS && !isStandalone) {
+        alert("บน iPhone/iPad ต้องกดปุ่มแชร์ 📤 ด้านบน แล้วเลือก 'เพิ่มไปยังหน้าโฮม' (Add to Home Screen) ก่อน จึงจะสามารถเปิดการแจ้งเตือนได้ครับ");
+        return;
+      }
+
+      if (typeof window === 'undefined' || !('Notification' in window)) {
+        alert('เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน');
+        return;
+      }
+
+      // 1. สิทธิ์ถูกบล็อกไว้ -> แจ้งเตือนวิธีปลดบล็อก
+      if (Notification.permission === 'denied') {
+        alert("เบราว์เซอร์ถูกบล็อกการแจ้งเตือนไว้ครับ! กรุณากดไอคอนแม่กุญแจ/การตั้งค่าสิทธิ์ แล้วเปลี่ยน Notifications เป็น 'Allow'");
+        return;
+      }
+
+      // 2. สิทธิ์ยังไม่ได้ตั้งค่า (Default) -> เด้งป็อบอัพ Allow/Block ของเบราว์เซอร์ทันที
+      if (Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          setIsPushSubscribed(false);
+          return;
+        }
+      }
+
+      // 3. สลับสถานะเปิด / ปิด การรับ Push ใน OneSignal
+      const OneSignal = (window as any).OneSignal;
+      if (OneSignal?.User?.PushSubscription) {
+        if (isPushSubscribed) {
+          await OneSignal.User.PushSubscription.optOut();
+          setIsPushSubscribed(false);
+        } else {
+          await OneSignal.User.PushSubscription.optIn();
+          setIsPushSubscribed(true);
+        }
+      } else {
+        setIsPushSubscribed(!isPushSubscribed);
+      }
+    } catch (err) {
+      console.error("Toggle notification failed:", err);
+    }
+  };
     try {
       if (typeof window === 'undefined' || !('Notification' in window)) {
         alert('เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน');
