@@ -8,8 +8,9 @@ const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_pEF2JfLNNVNSqP2EkWfLQA_07HIg3xu';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// UUID สำรองสำหรับผู้ใช้ที่ไม่ได้ล็อกอินเพื่อป้องกัน Supabase Syntax Error
+// 🟢 กำหนด UUID สำหรับ Guest และ Public Chat ให้ตรงตามมาตรฐาน PostgreSQL UUID
 const GUEST_UUID = '00000000-0000-0000-0000-000000000000';
+const PUBLIC_CHAT_UUID = '00000000-0000-0000-0000-000000000001';
 
 type Card = { suit: '♠' | '♥' | '♦' | '♣'; value: string; numVal: number };
 const SUITS: ('♠' | '♥' | '♦' | '♣')[] = ['♠', '♥', '♦', '♣'];
@@ -71,7 +72,7 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
       .channel('public_chat_room')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
         const newMsg = payload.new as any;
-        if (newMsg.receiver_id === 'PUBLIC_CHAT') {
+        if (newMsg.receiver_id === PUBLIC_CHAT_UUID) {
           setMessages((prev) => {
             if (prev.some((m) => m.id === newMsg.id.toString())) return prev;
             return [...prev, newMsg];
@@ -93,7 +94,7 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
     const { data } = await supabase
       .from('messages')
       .select('*')
-      .eq('receiver_id', 'PUBLIC_CHAT')
+      .eq('receiver_id', PUBLIC_CHAT_UUID)
       .order('created_at', { ascending: true })
       .limit(50);
 
@@ -107,15 +108,13 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
     const textToSend = chatInput.trim();
     setChatInput('');
 
-    // จัดรูปแบบการเก็บชื่อผู้ส่งไว้ใน content: [NAME:username]:ข้อความ
     const formattedContent = `[NAME:${username || 'ผู้เยี่ยมชม'}]:${textToSend}`;
     const validSenderId = session?.user?.id || GUEST_UUID;
 
-    // Optimistic UI (แสดงข้อความทันทีบนหน้าจอ)
     const optimisticMsg = {
       id: Date.now().toString(),
       sender_id: validSenderId,
-      receiver_id: 'PUBLIC_CHAT',
+      receiver_id: PUBLIC_CHAT_UUID,
       content: formattedContent,
       created_at: new Date().toISOString()
     };
@@ -123,12 +122,11 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
 
     await supabase.from('messages').insert({
       sender_id: validSenderId,
-      receiver_id: 'PUBLIC_CHAT',
+      receiver_id: PUBLIC_CHAT_UUID,
       content: formattedContent
     });
   };
 
-  // Audio Recording Functions
   const getAudioConfig = () => {
     const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
     if (isIOS || MediaRecorder.isTypeSupported('audio/mp4')) {
@@ -201,7 +199,7 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
       {
         id: Date.now().toString(),
         sender_id: validSenderId,
-        receiver_id: 'PUBLIC_CHAT',
+        receiver_id: PUBLIC_CHAT_UUID,
         content: formattedContent,
         created_at: new Date().toISOString()
       }
@@ -209,7 +207,7 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
 
     await supabase.from('messages').insert({
       sender_id: validSenderId,
-      receiver_id: 'PUBLIC_CHAT',
+      receiver_id: PUBLIC_CHAT_UUID,
       content: formattedContent
     });
 
@@ -220,7 +218,7 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
     let senderName = 'ผู้เยี่ยมชม';
     let body = rawContent;
 
-    if (rawContent.startsWith('[NAME:')) {
+    if (rawContent && rawContent.startsWith('[NAME:')) {
       const closingBracketIndex = rawContent.indexOf(']:');
       if (closingBracketIndex !== -1) {
         senderName = rawContent.substring(6, closingBracketIndex);
@@ -333,9 +331,9 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
     if (dScore > 21 || pScore > dScore) {
       endGame(updatedHand, dHand, 'YOU WIN! คุณชนะ DOUBLE 🏆', doubleBetVal * 2);
     } else if (pScore === dScore) {
-      endGame(updatedHand, dHand, 'PUSH! เสมอกัน 🤝', doubleBetVal);
+      endGame(playerHand, dHand, 'PUSH! เสมอกัน 🤝', doubleBetVal);
     } else {
-      endGame(updatedHand, dHand, 'DEALER WINS! เจ้ามือชนะ ❌', 0);
+      endGame(playerHand, dHand, 'DEALER WINS! เจ้ามือชนะ ❌', 0);
     }
   };
 
@@ -480,7 +478,7 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
           </form>
         )}
 
-        {/* --- MINI GAME MODAL (BLACKJACK UI) --- */}
+        {/* --- MINI GAME MODAL --- */}
         {showGameModal && (
           <div className="absolute inset-0 bg-slate-950/95 z-50 flex flex-col justify-between p-3 backdrop-blur-md animate-in zoom-in-95 duration-200">
             <div className="flex justify-between items-center z-10">
