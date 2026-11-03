@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Flame, Heart, X, MessageSquare, User, LogOut, Sparkles, Send, 
   ArrowLeft, Loader2, Mic, Square, Plus, Trash2, 
-  ChevronLeft, ChevronRight, Star, ShieldCheck, SlidersHorizontal, Bell, RotateCcw
+  ChevronLeft, ChevronRight, Star, ShieldCheck, SlidersHorizontal, Bell, RotateCcw, BellOff, Image as ImageIcon
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
@@ -69,14 +69,70 @@ export default function PeanutsMain({
   const [chatInput, setChatInput] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
+  const [uploadingChatImage, setUploadingChatImage] = useState(false);
   
   // Notification States
   const [unreadCounts, setUnreadCounts] = useState<{ [userId: string]: number }>({});
   const [toastNotification, setToastNotification] = useState<{ senderName: string; text: string; senderObj: any } | null>(null);
+  
+  // OneSignal Push Subscribed State
+  const [isPushSubscribed, setIsPushSubscribed] = useState(false);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
+
+  // เช็คสถานะ OneSignal Push Subscription เมื่อโหลดคอมโพเนนต์
+  useEffect(() => {
+    const checkOneSignalStatus = async () => {
+      try {
+        if ((window as any).OneSignal) {
+          const optedIn = (window as any).OneSignal.User?.PushSubscription?.optedIn;
+          setIsPushSubscribed(!!optedIn);
+
+          (window as any).OneSignal.User?.PushSubscription?.addEventListener("change", (event: any) => {
+            setIsPushSubscribed(event.current.optedIn);
+          });
+        }
+      } catch (e) {
+        console.error("OneSignal status check error:", e);
+      }
+    };
+    checkOneSignalStatus();
+  }, []);
+
+  // ฟังก์ชันกดเปิด/ปิดแจ้งเตือน OneSignal
+  const handleTogglePushNotification = async () => {
+    try {
+      if (typeof window !== 'undefined' && 'Notification' in window) {
+        if (Notification.permission === 'denied') {
+          alert("เบราว์เซอร์ถูกบล็อกการแจ้งเตือนไว้ครับ! กรุณากดไอคอนแม่กุญแจหน้าชื่อเว็บ (URL) แล้วเปลี่ยนสิทธิ์การแจ้งเตือนเป็น 'อนุญาต' (Allow)");
+          return;
+        }
+      }
+
+      const OneSignal = (window as any).OneSignal;
+      if (OneSignal) {
+        if (!isPushSubscribed) {
+          if (OneSignal.Notifications && OneSignal.Notifications.requestPermission) {
+            await OneSignal.Notifications.requestPermission();
+          } else if (OneSignal.Slidedown) {
+            await OneSignal.Slidedown.promptPush();
+          }
+        } else {
+          if (OneSignal.User && OneSignal.User.PushSubscription) {
+            await OneSignal.User.PushSubscription.optOut();
+          }
+        }
+        const optedIn = OneSignal.User?.PushSubscription?.optedIn;
+        setIsPushSubscribed(!!optedIn);
+      } else {
+        alert("OneSignal SDK ยังไม่พร้อมใช้งานบนเบราว์เซอร์นี้");
+      }
+    } catch (err) {
+      console.error("Toggle notification failed:", err);
+    }
+  };
 
   // 🟢 ฟังก์ชันส่ง Push Notification ตรงเข้ามือถือปลายทางผ่าน OneSignal REST API
   const sendPushToDevice = async (targetUserId: string, title: string, messageText: string) => {
@@ -205,7 +261,9 @@ export default function PeanutsMain({
           const newMsg = payload.new as any;
           playNotificationSound();
 
-          const msgPreview = newMsg.content.startsWith('[VOICE]:') ? '🎙️ ข้อความเสียง' : newMsg.content;
+          let msgPreview = newMsg.content;
+          if (newMsg.content.startsWith('[VOICE]:')) msgPreview = '🎙️ ข้อความเสียง';
+          if (newMsg.content.startsWith('[IMAGE]:')) msgPreview = '📷 รูปภาพ';
 
           setMatches((prevMatches) =>
             prevMatches.map((m) =>
@@ -382,9 +440,16 @@ export default function PeanutsMain({
               .limit(1)
               .single();
 
+            let msgPreview = 'เริ่มส่งข้อความทักทายกันเลย!';
+            if (lastMsg) {
+              if (lastMsg.content.startsWith('[VOICE]:')) msgPreview = '🎙️ ข้อความเสียง';
+              else if (lastMsg.content.startsWith('[IMAGE]:')) msgPreview = '📷 รูปภาพ';
+              else msgPreview = lastMsg.content;
+            }
+
             return {
               ...profile,
-              lastMessage: lastMsg ? (lastMsg.content.startsWith('[VOICE]:') ? '🎙️ ข้อความเสียง' : lastMsg.content) : 'เริ่มส่งข้อความทักทายกันเลย!'
+              lastMessage: msgPreview
             };
           })
         );
@@ -424,7 +489,6 @@ export default function PeanutsMain({
 
     if (isMutual || isSuperLike) {
       setMatchedUser(targetUser);
-      // แจ้งเตือนเมื่อ Match กัน
       sendPushToDevice(targetUser.id, "It's a Match! 🎉", `${displayName} ได้ถูกใจคุณกลับแล้ว เข้าไปทักทายเลย!`);
     }
 
@@ -481,7 +545,6 @@ export default function PeanutsMain({
       content: textToSend
     });
 
-    // 🟢 ส่ง Push Notification เข้ามือถือของผู้รับเมื่อพิมพ์ข้อความ
     sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', textToSend);
   };
 
@@ -558,8 +621,6 @@ export default function PeanutsMain({
     });
 
     setUploadingAudio(false);
-
-    // 🟢 ส่ง Push Notification เข้ามือถือผู้รับเมื่อส่งข้อความเสียง
     sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', '🎙️ ส่งข้อความเสียงถึงคุณ');
   };
 
@@ -607,6 +668,42 @@ export default function PeanutsMain({
     newPhotos[slotIndex] = data.publicUrl;
     setPhotos(newPhotos);
     setUploadingSlot(null);
+  };
+
+  // 🟢 ฟังก์ชันส่งรูปภาพในห้องแชทแมทส่วนตัว
+  const handleChatImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0 || !activeChat) return;
+    const originalFile = e.target.files[0];
+    setUploadingChatImage(true);
+
+    try {
+      const imageBlob = await convertToJpeg(originalFile);
+      const fileName = `chat_${session.user.id}_${Date.now()}.jpg`;
+
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, imageBlob, { contentType: 'image/jpeg', upsert: true });
+
+      if (uploadError) {
+        alert('ส่งรูปภาพไม่สำเร็จ: ' + uploadError.message);
+        setUploadingChatImage(false);
+        return;
+      }
+
+      const { data } = supabase.storage.from('avatars').getPublicUrl(fileName);
+
+      await supabase.from('messages').insert({
+        sender_id: session.user.id,
+        receiver_id: activeChat.id,
+        content: `[IMAGE]:${data.publicUrl}`
+      });
+
+      sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', '📷 ส่งรูปภาพถึงคุณ');
+    } catch (err) {
+      console.error('Chat image upload error:', err);
+    } finally {
+      setUploadingChatImage(false);
+    }
   };
 
   const handleRemovePhoto = (slotIndex: number) => {
@@ -730,7 +827,7 @@ export default function PeanutsMain({
               </div>
             </div>
             <h1 className="text-3xl font-black bg-gradient-to-r from-rose-400 via-amber-300 to-emerald-400 bg-clip-text text-transparent">
-              It's a Match!
+              It&apos;s a Match!
             </h1>
             <p className="text-xs text-slate-300 mt-2">
               คุณและ <span className="font-bold text-amber-400">{matchedUser.display_name}</span> แมทช์กันแล้ว!
@@ -835,7 +932,7 @@ export default function PeanutsMain({
 
                 <div className="flex flex-wrap gap-2 text-xs">
                   <span className="px-3 py-1 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 rounded-full flex items-center gap-1 font-medium">
-                    🎓 {selectedProfile.faculty || 'ไม่ระบุ'} • {selectedProfile.year || 'ชั้นปีที่ 1'} ({selectedProfile.gender || 'ไม่ระบุ'})
+                    🎓 {selectedProfile.faculty || 'ไม่ระบุ'} {selectedProfile.year || 'ชั้นปีที่ 1'} ({selectedProfile.gender || 'ไม่ระบุ'})
                   </span>
                   <span className="px-2.5 py-1 rounded-full bg-slate-900 border border-emerald-500/40 text-emerald-400 text-[10px] font-medium flex items-center gap-1">
                     <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> ยืนยันนิสิต @ku.th
@@ -885,7 +982,9 @@ export default function PeanutsMain({
               {messages.map((m) => {
                 const isMe = m.sender_id === session.user.id;
                 const isVoice = m.content.startsWith('[VOICE]:');
+                const isImage = m.content.startsWith('[IMAGE]:');
                 const audioUrl = isVoice ? m.content.replace('[VOICE]:', '') : '';
+                const imageUrl = isImage ? m.content.replace('[IMAGE]:', '') : '';
 
                 return (
                   <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
@@ -894,6 +993,8 @@ export default function PeanutsMain({
                     }`}>
                       {isVoice ? (
                         <audio controls preload="metadata" playsInline src={audioUrl} className="h-8 max-w-[210px] my-0.5" />
+                      ) : isImage ? (
+                        <img src={imageUrl} alt="Chat Attachment" className="rounded-xl max-w-full max-h-60 object-cover my-0.5 cursor-pointer hover:opacity-95" onClick={() => window.open(imageUrl, '_blank')} />
                       ) : (
                         <span className="break-all">{m.content}</span>
                       )}
@@ -912,15 +1013,29 @@ export default function PeanutsMain({
                     <Square className="w-3.5 h-3.5 fill-white" /> หยุดและส่ง
                   </button>
                 </div>
-              ) : uploadingAudio ? (
+              ) : uploadingAudio || uploadingChatImage ? (
                 <div className="flex-1 flex items-center justify-center gap-2 bg-slate-950 border border-slate-800 rounded-xl py-2.5 text-xs text-amber-400">
-                  <Loader2 className="w-4 h-4 animate-spin" /> กำลังส่งเสียง...
+                  <Loader2 className="w-4 h-4 animate-spin" /> {uploadingChatImage ? 'กำลังอัปโหลดรูปภาพ...' : 'กำลังส่งเสียง...'}
                 </div>
               ) : (
                 <>
+                  {/* ปุ่มส่งรูปภาพในแชท (วางข้างปุ่มไมค์) */}
+                  <label className="w-9 h-9 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-emerald-400 flex items-center justify-center shrink-0 cursor-pointer transition">
+                    <ImageIcon className="w-4 h-4" />
+                    <input 
+                      type="file" 
+                      accept="image/*" 
+                      onChange={handleChatImageUpload} 
+                      className="hidden" 
+                      disabled={uploadingChatImage}
+                    />
+                  </label>
+
+                  {/* ปุ่มอัดเสียง */}
                   <button type="button" onClick={startRecording} className="w-9 h-9 rounded-xl bg-slate-950 border border-slate-800 text-slate-400 hover:text-rose-400 flex items-center justify-center shrink-0">
                     <Mic className="w-4 h-4" />
                   </button>
+
                   <input
                     type="text"
                     placeholder="พิมพ์ข้อความ..."
@@ -965,15 +1080,6 @@ export default function PeanutsMain({
                         title="ตัวกรอง"
                       >
                         <SlidersHorizontal className="w-4 h-4" />
-                      </button>
-                      <button 
-                        className="w-9 h-9 rounded-full bg-[#121721] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition relative"
-                        title="การแจ้งเตือน"
-                      >
-                        <Bell className="w-4 h-4" />
-                        {totalUnreadCount > 0 && (
-                          <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
-                        )}
                       </button>
                     </div>
                   </div>
@@ -1057,7 +1163,7 @@ export default function PeanutsMain({
                           </h2>
 
                           <p className="text-[11px] text-emerald-400 font-medium flex items-center gap-1.5">
-                            🎓 {profiles[currentIndex].faculty} • {profiles[currentIndex].year} ({profiles[currentIndex].gender || 'ไม่ระบุ'})
+                            🎓 {profiles[currentIndex].faculty} {profiles[currentIndex].year} ({profiles[currentIndex].gender || 'ไม่ระบุ'})
                           </p>
 
                           <p className="text-xs text-slate-300 line-clamp-2 pt-0.5 font-sans leading-snug">
@@ -1117,9 +1223,33 @@ export default function PeanutsMain({
               {/* TAB 2: MATCHES */}
               {tab === 'matches' && (
                 <div className="p-4 h-full flex flex-col">
-                  <h2 className="text-base font-bold text-white mb-3 flex items-center gap-2">
-                    <MessageSquare className="w-5 h-5 text-emerald-400" /> คู่ Match ของคุณ ({matches.length})
-                  </h2>
+                  <div className="flex justify-between items-center mb-3">
+                    <h2 className="text-base font-bold text-white flex items-center gap-2">
+                      <MessageSquare className="w-5 h-5 text-emerald-400" /> คู่ Match ของคุณ ({matches.length})
+                    </h2>
+                    
+                    <button
+                      onClick={handleTogglePushNotification}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition shadow-md ${
+                        isPushSubscribed 
+                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' 
+                          : 'bg-[#121721] border-slate-800 text-slate-400 hover:text-white'
+                      }`}
+                      title={isPushSubscribed ? "คลิกเพื่อปิดการแจ้งเตือน" : "คลิกเพื่อเปิดการแจ้งเตือน"}
+                    >
+                      {isPushSubscribed ? (
+                        <>
+                          <Bell className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                          <span>เปิดแจ้งเตือนแล้ว</span>
+                        </>
+                      ) : (
+                        <>
+                          <BellOff className="w-3.5 h-3.5 text-slate-400" />
+                          <span>ปิดแจ้งเตือนอยู่</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
                   
                   {matches.length > 0 ? (
                     <div className="space-y-2">
