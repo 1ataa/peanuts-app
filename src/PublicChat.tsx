@@ -8,7 +8,6 @@ const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_pEF2JfLNNVNSqP2EkWfLQA_07HIg3xu';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// 🟢 กำหนด UUID สำหรับ Guest และ Public Chat ให้ตรงตามมาตรฐาน PostgreSQL UUID
 const GUEST_UUID = '00000000-0000-0000-0000-000000000000';
 const PUBLIC_CHAT_UUID = '00000000-0000-0000-0000-000000000001';
 
@@ -68,16 +67,21 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
 
   useEffect(() => {
     fetchPublicMessages();
+
+    // 🟢 Subscribe รับข่าวกระจายข้อความแบบ Realtime ข้ามเครื่อง
     const channel = supabase
-      .channel('public_chat_room')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, (payload) => {
+      .channel('public_chat_broadcast')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'messages',
+        filter: `receiver_id=eq.${PUBLIC_CHAT_UUID}`
+      }, (payload) => {
         const newMsg = payload.new as any;
-        if (newMsg.receiver_id === PUBLIC_CHAT_UUID) {
-          setMessages((prev) => {
-            if (prev.some((m) => m.id === newMsg.id.toString())) return prev;
-            return [...prev, newMsg];
-          });
-        }
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === newMsg.id.toString())) return prev;
+          return [...prev, newMsg];
+        });
       })
       .subscribe();
 
@@ -91,14 +95,18 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
   }, [messages]);
 
   const fetchPublicMessages = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('messages')
       .select('*')
       .eq('receiver_id', PUBLIC_CHAT_UUID)
       .order('created_at', { ascending: true })
       .limit(50);
 
-    if (data) setMessages(data);
+    if (error) {
+      console.error('Fetch error:', error);
+    } else if (data) {
+      setMessages(data);
+    }
   };
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -111,20 +119,18 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
     const formattedContent = `[NAME:${username || 'ผู้เยี่ยมชม'}]:${textToSend}`;
     const validSenderId = session?.user?.id || GUEST_UUID;
 
-    const optimisticMsg = {
-      id: Date.now().toString(),
-      sender_id: validSenderId,
-      receiver_id: PUBLIC_CHAT_UUID,
-      content: formattedContent,
-      created_at: new Date().toISOString()
-    };
-    setMessages((prev) => [...prev, optimisticMsg]);
-
-    await supabase.from('messages').insert({
+    // 🟢 ส่งข้อมูลเข้า Supabase และเช็ก Error
+    const { error } = await supabase.from('messages').insert({
       sender_id: validSenderId,
       receiver_id: PUBLIC_CHAT_UUID,
       content: formattedContent
     });
+
+    if (error) {
+      alert('ส่งข้อความไม่สำเร็จ: ' + error.message);
+    } else {
+      fetchPublicMessages();
+    }
   };
 
   const getAudioConfig = () => {
@@ -178,14 +184,14 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
 
   const uploadAndSendAudio = async (blob: Blob, ext: string, contentType: string) => {
     setUploadingAudio(true);
-    const fileName = `public_${session?.user?.id || 'guest'}_${Date.now()}.${ext}`;
+    const fileName = `public_${Date.now()}.${ext}`;
 
     const { error: uploadError } = await supabase.storage
       .from('audio-messages')
       .upload(fileName, blob, { contentType, upsert: true });
 
     if (uploadError) {
-      alert('ส่งข้อความเสียงไม่สำเร็จ: ' + uploadError.message);
+      alert('อัปโหลดไฟล์เสียงไม่สำเร็จ: ' + uploadError.message);
       setUploadingAudio(false);
       return;
     }
@@ -194,24 +200,19 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
     const formattedContent = `[NAME:${username || 'ผู้เยี่ยมชม'}]:[VOICE]:${data.publicUrl}`;
     const validSenderId = session?.user?.id || GUEST_UUID;
 
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now().toString(),
-        sender_id: validSenderId,
-        receiver_id: PUBLIC_CHAT_UUID,
-        content: formattedContent,
-        created_at: new Date().toISOString()
-      }
-    ]);
-
-    await supabase.from('messages').insert({
+    const { error: msgError } = await supabase.from('messages').insert({
       sender_id: validSenderId,
       receiver_id: PUBLIC_CHAT_UUID,
       content: formattedContent
     });
 
     setUploadingAudio(false);
+
+    if (msgError) {
+      alert('ส่งข้อความเสียงไม่สำเร็จ: ' + msgError.message);
+    } else {
+      fetchPublicMessages();
+    }
   };
 
   const parseMessageContent = (rawContent: string) => {
@@ -428,7 +429,7 @@ export default function PublicChat({ session, onBack }: { session?: any; onBack:
           </main>
         )}
 
-        {/* INPUT BAR WITH MINI-GAME BUTTON & VOICE RECORDING */}
+        {/* INPUT BAR */}
         {hasJoinedChat && (
           <form onSubmit={handleSendMessage} className="p-3 bg-[#121721] border-t border-slate-800 flex items-center gap-2 shrink-0">
             <button
