@@ -36,10 +36,12 @@ export default function App() {
     );
   }
 
+  // เข้าหน้าห้องแชทสาธารณะ
   if (viewMode === 'public_chat') {
     return <PublicChat onBack={() => setViewMode('landing')} />;
   }
 
+  // เข้าหน้าหลักเมื่อล็อกอินเรียบร้อย
   if (session) {
     return (
       <PeanutsMain 
@@ -49,5 +51,6 @@ export default function App() {
     );
   }
 
-  return <PeanutsLanding />;
+  // 🟢 ส่งฟังก์ชันเปิดแชทสาธารณะให้หน้า Landing
+  return <PeanutsLanding onOpenPublicChat={() => setViewMode('public_chat')} />;
 }
