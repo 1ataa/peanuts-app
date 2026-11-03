@@ -23,7 +23,13 @@ const KU_FACULTIES = [
   'คณะสิ่งแวดล้อม'
 ];
 
-export default function PeanutsMain({ session }: { session: any }) {
+export default function PeanutsMain({ 
+  session, 
+  onOpenPublicChat 
+}: { 
+  session: any; 
+  onOpenPublicChat?: () => void;
+}) {
   const [tab, setTab] = useState<'discover' | 'matches' | 'profile'>('discover');
   const [profiles, setProfiles] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -1039,12 +1045,23 @@ export default function PeanutsMain({ session }: { session: any }) {
                     </button>
                   </form>
 
-                  <button
-                    onClick={() => supabase.auth.signOut()}
-                    className="w-full py-3 bg-[#121721] border border-slate-800 text-rose-400 font-bold text-xs rounded-2xl flex items-center justify-center gap-2"
-                  >
-                    <LogOut className="w-4 h-4" /> ออกจากระบบ
-                  </button>
+                {/* 🟢 ปุ่มเข้าห้องพูดคุยสาธารณะ (วางแทรกตรงนี้) */}
+<button
+  type="button"
+  onClick={onOpenPublicChat}
+  className="w-full py-3 bg-[#121721] border border-amber-500/40 text-amber-400 font-bold text-xs rounded-2xl flex items-center justify-center gap-2 hover:bg-amber-500/10 active:scale-95 transition shadow-lg shadow-amber-500/5"
+>
+  <MessageSquare className="w-4 h-4 text-amber-400" /> 
+  ห้องพูดคุยสาธารณะ & ข้อเสนอแนะ 💬
+</button>
+
+{/* ปุ่มออกจากระบบเดิม */}
+<button
+  onClick={() => supabase.auth.signOut()}
+  className="w-full py-3 bg-[#121721] border border-slate-800 text-rose-400 font-bold text-xs rounded-2xl flex items-center justify-center gap-2"
+>
+  <LogOut className="w-4 h-4" /> ออกจากระบบ
+</button>
                 </div>
               )}
 
