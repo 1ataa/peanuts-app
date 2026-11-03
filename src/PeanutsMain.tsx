@@ -151,6 +151,24 @@ export default function PeanutsMain({
       console.error("Toggle notification failed:", err);
     }
   };
+
+      // 3. สลับสถานะเปิด / ปิด การรับ Push ใน OneSignal
+      const OneSignal = (window as any).OneSignal;
+      if (OneSignal?.User?.PushSubscription) {
+        if (isPushSubscribed) {
+          await OneSignal.User.PushSubscription.optOut();
+          setIsPushSubscribed(false);
+        } else {
+          await OneSignal.User.PushSubscription.optIn();
+          setIsPushSubscribed(true);
+        }
+      } else {
+        setIsPushSubscribed(!isPushSubscribed);
+      }
+    } catch (err) {
+      console.error("Toggle notification failed:", err);
+    }
+  };
     try {
       if (typeof window === 'undefined' || !('Notification' in window)) {
         alert('เบราว์เซอร์นี้ไม่รองรับการแจ้งเตือน');
