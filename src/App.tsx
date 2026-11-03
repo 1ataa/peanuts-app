@@ -36,12 +36,12 @@ export default function App() {
     );
   }
 
-  // เข้าหน้าห้องแชทสาธารณะ
+  // 1. หน้าห้องแชทสาธารณะ
   if (viewMode === 'public_chat') {
-    return <PublicChat onBack={() => setViewMode('landing')} />;
+    return <PublicChat session={session} onBack={() => setViewMode('landing')} />;
   }
 
-  // เข้าหน้าหลักเมื่อล็อกอินเรียบร้อย
+  // 2. ถ้าล็อกอินเข้าใช้งานแล้ว แสดงหน้าหลัก PeanutsMain
   if (session) {
     return (
       <PeanutsMain 
@@ -51,6 +51,16 @@ export default function App() {
     );
   }
 
-  // 🟢 ส่งฟังก์ชันเปิดแชทสาธารณะให้หน้า Landing
-  return <PeanutsLanding onOpenPublicChat={() => setViewMode('public_chat')} />;
+  // 3. หน้ากรอกอีเมลยืนยันตัวตน OTP (@ku.th)
+  if (viewMode === 'otp') {
+    return <AuthOTP onBack={() => setViewMode('landing')} />;
+  }
+
+  // 4. หน้า Landing (ส่งทั้งฟังก์ชันปุ่มเขียว onAccept และปุ่มเหลือง onOpenPublicChat)
+  return (
+    <PeanutsLanding 
+      onAccept={() => setViewMode('otp')} 
+      onOpenPublicChat={() => setViewMode('public_chat')} 
+    />
+  );
 }
