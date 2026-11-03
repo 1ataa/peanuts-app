@@ -10,6 +10,9 @@ const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_pEF2JfLNNVNSqP2EkWfLQA_07HIg3xu';
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
+const ONESIGNAL_APP_ID = 'b0557601-dffe-4e26-8e78-b0695de8b150';
+const ONESIGNAL_REST_KEY = 'os_v2_app_wbkxmao77zhcndtywbuv32frkcmdqrwrua4ebjehqu7blhi45eajtlzx7nsuxseji2qlorzgpvrzidrwv6n3ouixuz4iqanwphzbjry';
+
 const KU_FACULTIES = [
   'ไม่ระบุ',
   'คณะเกษตร กำแพงแสน',
@@ -59,7 +62,7 @@ export default function PeanutsMain({
   const [saving, setSaving] = useState(false);
   const [uploadingSlot, setUploadingSlot] = useState<number | null>(null);
 
-  // Chat & Match States
+  // Chat, Match & Notification States
   const [matches, setMatches] = useState<any[]>([]);
   const [activeChat, setActiveChat] = useState<any>(null);
   const [messages, setMessages] = useState<any[]>([]);
@@ -67,11 +70,60 @@ export default function PeanutsMain({
   const [isRecording, setIsRecording] = useState(false);
   const [uploadingAudio, setUploadingAudio] = useState(false);
   
+  // Notification States
+  const [unreadCounts, setUnreadCounts] = useState<{ [userId: string]: number }>({});
+  const [toastNotification, setToastNotification] = useState<{ senderName: string; text: string; senderObj: any } | null>(null);
+
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // 🟢 Helper ป้องกัน Crash เรื่องรูปภาพใน Database
+  // 🟢 ฟังก์ชันส่ง Push Notification ตรงเข้ามือถือปลายทางผ่าน OneSignal REST API
+  const sendPushToDevice = async (targetUserId: string, title: string, messageText: string) => {
+    try {
+      const { data: targetProfile } = await supabase
+        .from('profiles')
+        .select('onesignal_id')
+        .eq('id', targetUserId)
+        .single();
+
+      if (targetProfile?.onesignal_id) {
+        await fetch('https://onesignal.com/api/v1/notifications', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json; charset=utf-8',
+            'Authorization': `Key ${ONESIGNAL_REST_KEY}`
+          },
+          body: JSON.stringify({
+            app_id: ONESIGNAL_APP_ID,
+            include_subscription_ids: [targetProfile.onesignal_id],
+            headings: { en: title, th: title },
+            contents: { en: messageText, th: messageText }
+          })
+        });
+      }
+    } catch (err) {
+      console.error('Push send failed:', err);
+    }
+  };
+
+  const playNotificationSound = () => {
+    try {
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.3);
+    } catch (e) {}
+  };
+
   const getProfilePhotos = (profile: any) => {
     if (!profile) return [];
     const list: string[] = [];
@@ -120,12 +172,74 @@ export default function PeanutsMain({
     }
   };
 
+  const handleOpenChat = (matchUser: any) => {
+    setActiveChat(matchUser);
+    setUnreadCounts((prev) => {
+      const copy = { ...prev };
+      delete copy[matchUser.id];
+      return copy;
+    });
+  };
+
   useEffect(() => {
     if (session?.user) {
       loadMyProfile();
       fetchMatches();
     }
   }, [session]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+
+    const globalChannel = supabase
+      .channel(`global_messages_${session.user.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `receiver_id=eq.${session.user.id}`
+        },
+        (payload) => {
+          const newMsg = payload.new as any;
+          playNotificationSound();
+
+          const msgPreview = newMsg.content.startsWith('[VOICE]:') ? '🎙️ ข้อความเสียง' : newMsg.content;
+
+          setMatches((prevMatches) =>
+            prevMatches.map((m) =>
+              m.id === newMsg.sender_id ? { ...m, lastMessage: msgPreview } : m
+            )
+          );
+
+          if (!activeChat || activeChat.id !== newMsg.sender_id) {
+            setUnreadCounts((prev) => ({
+              ...prev,
+              [newMsg.sender_id]: (prev[newMsg.sender_id] || 0) + 1
+            }));
+
+            setMatches((prevMatches) => {
+              const sender = prevMatches.find((m) => m.id === newMsg.sender_id);
+              if (sender) {
+                setToastNotification({
+                  senderName: sender.display_name,
+                  text: msgPreview,
+                  senderObj: sender
+                });
+                setTimeout(() => setToastNotification(null), 4500);
+              }
+              return prevMatches;
+            });
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(globalChannel);
+    };
+  }, [session, activeChat]);
 
   useEffect(() => {
     if (!activeChat || !session?.user) return;
@@ -310,6 +424,8 @@ export default function PeanutsMain({
 
     if (isMutual || isSuperLike) {
       setMatchedUser(targetUser);
+      // แจ้งเตือนเมื่อ Match กัน
+      sendPushToDevice(targetUser.id, "It's a Match! 🎉", `${displayName} ได้ถูกใจคุณกลับแล้ว เข้าไปทักทายเลย!`);
     }
 
     setHistoryStack((prev) => [...prev, currentIndex]);
@@ -364,6 +480,9 @@ export default function PeanutsMain({
       receiver_id: activeChat.id,
       content: textToSend
     });
+
+    // 🟢 ส่ง Push Notification เข้ามือถือของผู้รับเมื่อพิมพ์ข้อความ
+    sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', textToSend);
   };
 
   const getAudioConfig = () => {
@@ -439,6 +558,9 @@ export default function PeanutsMain({
     });
 
     setUploadingAudio(false);
+
+    // 🟢 ส่ง Push Notification เข้ามือถือผู้รับเมื่อส่งข้อความเสียง
+    sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', '🎙️ ส่งข้อความเสียงถึงคุณ');
   };
 
   const convertToJpeg = (file: File): Promise<Blob> => {
@@ -527,10 +649,35 @@ export default function PeanutsMain({
     }
   };
 
+  const totalUnreadCount = Object.values(unreadCounts).reduce((a, b) => a + b, 0);
+
   return (
     <div className="flex justify-center items-center min-h-screen bg-slate-950 font-sans p-0 sm:p-4 text-slate-100 selection:bg-emerald-500 selection:text-slate-950">
       <div className="w-full max-w-md h-[100vh] sm:h-[880px] bg-[#0b0e14] sm:rounded-[36px] shadow-2xl flex flex-col justify-between overflow-hidden border border-slate-800/80 relative">
         
+        {/* TOAST NOTIFICATION FLOATING BANNER */}
+        {toastNotification && (
+          <div 
+            onClick={() => {
+              handleOpenChat(toastNotification.senderObj);
+              setTab('matches');
+              setToastNotification(null);
+            }}
+            className="absolute top-3 inset-x-3 z-50 bg-[#121721]/95 border border-amber-500/50 p-3 rounded-2xl shadow-2xl flex items-center gap-3 backdrop-blur-md cursor-pointer hover:bg-slate-900 transition animate-in slide-in-from-top duration-300"
+          >
+            <div className="w-10 h-10 rounded-full bg-slate-800 border border-amber-400 overflow-hidden shrink-0">
+              <img src={getProfilePhotos(toastNotification.senderObj)[0] || toastNotification.senderObj.avatar_url} alt="" className="w-full h-full object-cover" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex justify-between items-center">
+                <span className="text-xs font-bold text-white truncate">{toastNotification.senderName}</span>
+                <span className="text-[9px] bg-amber-500 text-slate-950 font-bold px-1.5 py-0.5 rounded-full">ข้อความใหม่</span>
+              </div>
+              <p className="text-[11px] text-slate-300 truncate font-sans">{toastNotification.text}</p>
+            </div>
+          </div>
+        )}
+
         {/* --- FILTER MODAL --- */}
         {showFilterModal && (
           <div className="absolute inset-0 bg-slate-950/90 z-50 flex flex-col justify-end backdrop-blur-md animate-in slide-in-from-bottom duration-300">
@@ -601,7 +748,7 @@ export default function PeanutsMain({
 
             <button
               onClick={() => {
-                setActiveChat(matchedUser);
+                handleOpenChat(matchedUser);
                 setMatchedUser(null);
                 setTab('matches');
               }}
@@ -615,7 +762,7 @@ export default function PeanutsMain({
           </div>
         )}
 
-        {/* --- SELECTED PROFILE DETAIL MODAL (ดูโปรไฟล์และรูปทั้งหมด) --- */}
+        {/* --- SELECTED PROFILE DETAIL MODAL --- */}
         {selectedProfile && (
           <div className="absolute inset-0 bg-slate-950/95 z-50 flex flex-col overflow-y-auto p-4 backdrop-blur-md">
             <button 
@@ -626,7 +773,6 @@ export default function PeanutsMain({
             </button>
 
             <div className="bg-[#121721] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex-1 flex flex-col">
-              {/* Profile Image Viewport */}
               <div className="h-96 bg-slate-950 relative group shrink-0">
                 {(() => {
                   const detailPhotos = getProfilePhotos(selectedProfile);
@@ -643,7 +789,6 @@ export default function PeanutsMain({
                         </div>
                       )}
 
-                      {/* Photo Dots */}
                       {detailPhotos.length > 1 && (
                         <div className="absolute top-3 inset-x-0 flex justify-center gap-1.5 z-10 px-12">
                           {detailPhotos.map((_: any, idx: number) => (
@@ -655,7 +800,6 @@ export default function PeanutsMain({
                         </div>
                       )}
 
-                      {/* Photo Navigation Arrows */}
                       {detailPhotos.length > 1 && (
                         <>
                           <button 
@@ -683,7 +827,6 @@ export default function PeanutsMain({
                 })()}
               </div>
 
-              {/* Profile Details */}
               <div className="p-5 space-y-3 flex-1 overflow-y-auto">
                 <h2 className="text-xl font-black text-white flex items-center gap-2">
                   <span>{selectedProfile.display_name}</span>
@@ -713,7 +856,6 @@ export default function PeanutsMain({
         {/* --- ACTIVE MATCH CHAT VIEW --- */}
         {activeChat ? (
           <div className="flex-1 flex flex-col bg-slate-950">
-            {/* Clickable Chat Header */}
             <header className="px-4 py-3 bg-[#121721] border-b border-slate-800 flex items-center gap-3">
               <button onClick={() => setActiveChat(null)} className="p-1 text-slate-400 hover:text-white shrink-0">
                 <ArrowLeft className="w-5 h-5" />
@@ -801,7 +943,6 @@ export default function PeanutsMain({
               {/* TAB 1: DISCOVER */}
               {tab === 'discover' && (
                 <div className="p-3 sm:p-4 h-full flex flex-col justify-between min-h-0 overflow-hidden">
-                  {/* HEADER BAR */}
                   <div className="flex justify-between items-center py-1 px-1 shrink-0">
                     <div className="flex items-center gap-2.5">
                       <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center shadow-lg shadow-amber-500/20">
@@ -826,26 +967,25 @@ export default function PeanutsMain({
                         <SlidersHorizontal className="w-4 h-4" />
                       </button>
                       <button 
-                        className="w-9 h-9 rounded-full bg-[#121721] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition"
+                        className="w-9 h-9 rounded-full bg-[#121721] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition relative"
                         title="การแจ้งเตือน"
                       >
                         <Bell className="w-4 h-4" />
+                        {totalUnreadCount > 0 && (
+                          <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-amber-400 rounded-full animate-ping" />
+                        )}
                       </button>
                     </div>
                   </div>
 
-                  {/* CARD AREA */}
                   {profiles.length > 0 && currentIndex < profiles.length ? (
                     <div className="flex-1 my-2 bg-[#121721] border border-slate-800/80 rounded-[28px] overflow-hidden shadow-2xl flex flex-col relative min-h-0">
-                      
-                      {/* CARD CONTAINER WITH SWIPE ANIMATION */}
                       <div className={`flex-1 bg-slate-950 relative group min-h-0 transition-all duration-300 ease-out transform ${
                         swipeDirection === 'like' ? 'translate-x-[120%] rotate-12 opacity-0' :
                         swipeDirection === 'pass' ? '-translate-x-[120%] -rotate-12 opacity-0' :
                         swipeDirection === 'superlike' ? '-translate-y-[120%] scale-95 opacity-0' :
                         swipeDirection === 'rewind' ? 'animate-in zoom-in-95 duration-300' : ''
                       }`}>
-                        
                         {(() => {
                           const currentCard = profiles[currentIndex];
                           const cardPhotos = getProfilePhotos(currentCard);
@@ -863,14 +1003,12 @@ export default function PeanutsMain({
                                 )}
                               </div>
 
-                              {/* Top Bar: Verified Badge */}
                               <div className="absolute top-3 left-3 z-10 pointer-events-none">
                                 <span className="px-2.5 py-1 rounded-full bg-slate-950/70 border border-emerald-500/40 text-emerald-400 text-[10px] font-medium flex items-center gap-1 backdrop-blur-md">
                                   <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" /> ยืนยันนิสิต @ku.th
                                 </span>
                               </div>
 
-                              {/* SWIPE OVERLAY BADGES */}
                               {swipeDirection === 'like' && (
                                 <div className="absolute top-8 left-6 z-30 border-4 border-emerald-400 text-emerald-400 text-2xl font-black px-4 py-1 rounded-xl -rotate-12 uppercase tracking-wider backdrop-blur-sm bg-emerald-500/10 animate-in zoom-in-50 duration-150">
                                   LIKE
@@ -887,7 +1025,6 @@ export default function PeanutsMain({
                                 </div>
                               )}
 
-                              {/* Photo Dots */}
                               {cardPhotos.length > 1 && (
                                 <div className="absolute top-3 inset-x-0 flex justify-center gap-1.5 z-10 px-24">
                                   {cardPhotos.map((_: any, idx: number) => (
@@ -896,7 +1033,6 @@ export default function PeanutsMain({
                                 </div>
                               )}
 
-                              {/* Photo Arrows */}
                               {cardPhotos.length > 1 && (
                                 <>
                                   <button onClick={() => setCardPhotoIndex((prev) => (prev > 0 ? prev - 1 : cardPhotos.length - 1))} className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-slate-950/40 text-white opacity-0 group-hover:opacity-100 transition z-10">
@@ -911,7 +1047,6 @@ export default function PeanutsMain({
                           );
                         })()}
 
-                        {/* Profile Info Overlay */}
                         <div 
                           onClick={() => handleOpenProfileDetail(profiles[currentIndex])} 
                           className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-[#0b0e14] via-[#0b0e14]/80 to-transparent p-4 pb-3 cursor-pointer space-y-1 z-20 hover:opacity-90 transition"
@@ -931,9 +1066,7 @@ export default function PeanutsMain({
                         </div>
                       </div>
 
-                      {/* --- ACTION BUTTONS --- */}
                       <div className="py-3 px-6 bg-[#0b0e14] flex justify-center items-center gap-4 border-t border-slate-900 shrink-0 z-20">
-                        {/* REWIND */}
                         <button 
                           onClick={onRewindClick}
                           disabled={historyStack.length === 0 || isAnimating}
@@ -943,7 +1076,6 @@ export default function PeanutsMain({
                           <RotateCcw className="w-4 h-4" />
                         </button>
 
-                        {/* PASS */}
                         <button 
                           onClick={onPassClick} 
                           disabled={isAnimating}
@@ -953,7 +1085,6 @@ export default function PeanutsMain({
                           <X className="w-6 h-6" />
                         </button>
 
-                        {/* SUPER LIKE */}
                         <button 
                           onClick={() => onLikeClick(true)} 
                           disabled={isAnimating}
@@ -963,7 +1094,6 @@ export default function PeanutsMain({
                           <Star className="w-5 h-5 fill-sky-400" />
                         </button>
 
-                        {/* LIKE */}
                         <button 
                           onClick={() => onLikeClick(false)} 
                           disabled={isAnimating}
@@ -993,44 +1123,58 @@ export default function PeanutsMain({
                   
                   {matches.length > 0 ? (
                     <div className="space-y-2">
-                      {matches.map((m) => (
-                        <div 
-                          key={m.id} 
-                          className="p-3 bg-[#121721] border border-slate-800 rounded-2xl flex items-center gap-3 hover:border-emerald-500/40 transition"
-                        >
-                          {/* 🟢 กดที่รูปโปรไฟล์เพื่อเปิดดูรูปทั้งหมดและ Bio */}
-                          <div 
-                            onClick={() => handleOpenProfileDetail(m)} 
-                            className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden shrink-0 border border-emerald-500/30 cursor-pointer hover:opacity-80 transition relative group"
-                            title="คลิกดูโปรไฟล์"
-                          >
-                            <img src={getProfilePhotos(m)[0] || m.avatar_url} alt="" className="w-full h-full object-cover" />
-                          </div>
+                      {matches.map((m) => {
+                        const unreadCount = unreadCounts[m.id] || 0;
 
-                          {/* 🟢 กดที่ชื่อ/ข้อความเพื่อเปิดห้องแชท */}
+                        return (
                           <div 
-                            onClick={() => setActiveChat(m)} 
-                            className="flex-1 min-w-0 cursor-pointer"
+                            key={m.id} 
+                            className={`p-3 bg-[#121721] border rounded-2xl flex items-center gap-3 transition ${
+                              unreadCount > 0 ? 'border-amber-500/80 bg-amber-500/5' : 'border-slate-800 hover:border-emerald-500/40'
+                            }`}
                           >
-                            <div className="flex justify-between items-center">
-                              <h3 className="text-xs font-bold text-white flex items-center gap-1 truncate">
-                                <span>{m.display_name}</span>
-                              </h3>
-                              <span className="text-[10px] text-amber-400 shrink-0">{m.faculty}</span>
+                            <div 
+                              onClick={() => handleOpenProfileDetail(m)} 
+                              className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden shrink-0 border border-emerald-500/30 cursor-pointer hover:opacity-80 transition relative group"
+                              title="คลิกดูโปรไฟล์"
+                            >
+                              <img src={getProfilePhotos(m)[0] || m.avatar_url} alt="" className="w-full h-full object-cover" />
                             </div>
-                            <p className="text-[11px] text-slate-400 mt-0.5 truncate">{m.lastMessage}</p>
-                          </div>
 
-                          {/* 🟢 ปุ่มไอคอนดูโปรไฟล์ */}
-                          <button
-                            onClick={() => handleOpenProfileDetail(m)}
-                            className="p-2 text-slate-400 hover:text-emerald-400 rounded-xl hover:bg-slate-900 transition shrink-0"
-                            title="ดูโปรไฟล์"
-                          >
-                            <User className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
+                            <div 
+                              onClick={() => handleOpenChat(m)} 
+                              className="flex-1 min-w-0 cursor-pointer"
+                            >
+                              <div className="flex justify-between items-center">
+                                <h3 className="text-xs font-bold text-white flex items-center gap-1.5 truncate">
+                                  <span>{m.display_name}</span>
+                                  {unreadCount > 0 && (
+                                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse shrink-0" />
+                                  )}
+                                </h3>
+                                <span className="text-[10px] text-amber-400 shrink-0">{m.faculty}</span>
+                              </div>
+                              <p className={`text-[11px] mt-0.5 truncate ${unreadCount > 0 ? 'text-amber-300 font-bold' : 'text-slate-400'}`}>
+                                {m.lastMessage}
+                              </p>
+                            </div>
+
+                            {unreadCount > 0 ? (
+                              <span className="w-5 h-5 rounded-full bg-amber-500 text-slate-950 font-black text-[10px] flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/20">
+                                {unreadCount}
+                              </span>
+                            ) : (
+                              <button
+                                onClick={() => handleOpenProfileDetail(m)}
+                                className="p-2 text-slate-400 hover:text-emerald-400 rounded-xl hover:bg-slate-900 transition shrink-0"
+                                title="ดูโปรไฟล์"
+                              >
+                                <User className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="flex-1 flex flex-col items-center justify-center text-xs text-slate-500 gap-2 py-16">
@@ -1053,7 +1197,6 @@ export default function PeanutsMain({
                     </span>
                   </div>
 
-                  {/* 3 Photo Slots */}
                   <div className="bg-[#121721] border border-slate-800 rounded-2xl p-4 space-y-3">
                     <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
                       รูปโปรไฟล์ของคุณ (สูงสุด 3 รูป)
@@ -1086,11 +1229,9 @@ export default function PeanutsMain({
                     </div>
                   </div>
 
-                  {/* Profile Edit Form */}
                   <form onSubmit={handleSaveProfile} className="bg-[#121721] border border-slate-800 rounded-2xl p-4 space-y-4">
                     <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">แก้ไขข้อมูลส่วนตัว</h3>
 
-                    {/* Display Name & Age */}
                     <div className="grid grid-cols-3 gap-3">
                       <div className="col-span-2">
                         <label className="text-xs text-slate-400 font-medium block mb-1">ชื่อที่แสดง (Display Name)</label>
@@ -1191,7 +1332,6 @@ export default function PeanutsMain({
                     </button>
                   </form>
 
-                  {/* ปุ่มเข้าห้องพูดคุยสาธารณะ */}
                   <button
                     type="button"
                     onClick={onOpenPublicChat}
@@ -1201,7 +1341,6 @@ export default function PeanutsMain({
                     ห้องพูดคุยสาธารณะ & ข้อเสนอแนะ 💬
                   </button>
 
-                  {/* ปุ่มออกจากระบบ */}
                   <button
                     onClick={() => supabase.auth.signOut()}
                     className="w-full py-3 bg-[#121721] border border-slate-800 text-rose-400 font-bold text-xs rounded-2xl flex items-center justify-center gap-2 hover:bg-rose-500/10 transition"
@@ -1219,10 +1358,19 @@ export default function PeanutsMain({
                 <Flame className="w-5 h-5" />
                 <span className="text-[10px]">ค้นหา</span>
               </button>
-              <button onClick={() => setTab('matches')} className={`flex flex-col items-center gap-1 ${tab === 'matches' ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
-                <MessageSquare className="w-5 h-5" />
+              
+              <button onClick={() => setTab('matches')} className={`flex flex-col items-center gap-1 relative ${tab === 'matches' ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
+                <div className="relative">
+                  <MessageSquare className="w-5 h-5" />
+                  {totalUnreadCount > 0 && (
+                    <span className="absolute -top-1.5 -right-2 bg-amber-400 text-slate-950 font-black text-[9px] w-4 h-4 rounded-full flex items-center justify-center border border-slate-950 animate-bounce">
+                      {totalUnreadCount}
+                    </span>
+                  )}
+                </div>
                 <span className="text-[10px]">แชทคู่ Match</span>
               </button>
+
               <button onClick={() => setTab('profile')} className={`flex flex-col items-center gap-1 ${tab === 'profile' ? 'text-emerald-400 font-bold' : 'text-slate-500'}`}>
                 <User className="w-5 h-5" />
                 <span className="text-[10px]">โปรไฟล์</span>
