@@ -36,26 +36,18 @@ export default function App() {
     );
   }
 
-  // 1. ล็อกอินแล้วเข้าแอปหลัก
-  if (session) {
-    return <PeanutsMain session={session} />;
-  }
-
-  // 2. ถ้าเลือกกดเข้าห้องแชทสาธารณะ
   if (viewMode === 'public_chat') {
     return <PublicChat onBack={() => setViewMode('landing')} />;
   }
 
-  // 3. ถ้าเลือกกดเข้าหน้าล็อกอิน OTP
-  if (viewMode === 'otp') {
-    return <AuthOTP onBack={() => setViewMode('landing')} />;
+  if (session) {
+    return (
+      <PeanutsMain 
+        session={session} 
+        onOpenPublicChat={() => setViewMode('public_chat')} 
+      />
+    );
   }
 
-  // 4. หน้าแรกสุด (Landing Page)
-  return (
-    <PeanutsLanding 
-      onStart={() => setViewMode('otp')} 
-      onPublicChat={() => setViewMode('public_chat')} 
-    />
-  );
+  return <PeanutsLanding />;
 }
