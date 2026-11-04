@@ -3,7 +3,7 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Flame, Heart, X, MessageSquare, User, LogOut, Sparkles, Send, 
   ArrowLeft, Loader2, Mic, Square, Plus, Trash2, 
-  ChevronLeft, ChevronRight, Star, ShieldCheck, SlidersHorizontal, Bell, RotateCcw, BellOff, Image as ImageIcon
+  ChevronLeft, ChevronRight, Star, ShieldCheck, SlidersHorizontal, Bell, RotateCcw, BellOff, Image as ImageIcon, RefreshCw
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
@@ -41,6 +41,10 @@ export default function PeanutsMain({
   const [myProfile, setMyProfile] = useState<any>(null);
   const [historyStack, setHistoryStack] = useState<number[]>([]);
   
+  // Refreshing States
+  const [isRefreshingDiscover, setIsRefreshingDiscover] = useState(false);
+  const [isRefreshingMatches, setIsRefreshingMatches] = useState(false);
+
   // Swipe Animation State
   const [swipeDirection, setSwipeDirection] = useState<'like' | 'pass' | 'superlike' | 'rewind' | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
@@ -108,7 +112,6 @@ export default function PeanutsMain({
       const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (navigator as any).standalone;
 
-      // ถ้าเป็น iOS/iPadOS แล้วเล่นใน Safari ปกติ (ยังไม่ได้เพิ่มลงหน้าโฮม)
       if (isIOS && !isStandalone) {
         alert("บน iPhone/iPad ต้องกดปุ่มแชร์ 📤 ด้านบน แล้วเลือก 'เพิ่มไปยังหน้าโฮม' (Add to Home Screen) ก่อน จึงจะสามารถเปิดการแจ้งเตือนได้ครับ");
         return;
@@ -119,13 +122,11 @@ export default function PeanutsMain({
         return;
       }
 
-      // 1. สิทธิ์ถูกบล็อกไว้ -> แจ้งเตือนวิธีปลดบล็อก
       if (Notification.permission === 'denied') {
         alert("เบราว์เซอร์ถูกบล็อกการแจ้งเตือนไว้ครับ! กรุณากดไอคอนแม่กุญแจ/การตั้งค่าสิทธิ์ แล้วเปลี่ยน Notifications เป็น 'Allow'");
         return;
       }
 
-      // 2. สิทธิ์ยังไม่ได้ตั้งค่า (Default) -> เด้งป็อบอัพ Allow/Block ของเบราว์เซอร์ทันที
       if (Notification.permission === 'default') {
         const permission = await Notification.requestPermission();
         if (permission !== 'granted') {
@@ -134,7 +135,6 @@ export default function PeanutsMain({
         }
       }
 
-      // 3. สลับสถานะเปิด / ปิด การรับ Push ใน OneSignal
       const OneSignal = (window as any).OneSignal;
       if (OneSignal?.User?.PushSubscription) {
         if (isPushSubscribed) {
@@ -393,7 +393,9 @@ export default function PeanutsMain({
     }
   };
 
+  // ฟังก์ชันดึงและสุ่มสลับตำแหน่งโปรไฟล์ (Random Shuffle)
   const fetchDiscoverProfiles = async (targetGender: string) => {
+    setIsRefreshingDiscover(true);
     const { data: myLikes } = await supabase
       .from('likes')
       .select('liked_user_id')
@@ -413,14 +415,23 @@ export default function PeanutsMain({
 
     const { data } = await query;
     if (data) {
-      setProfiles(data);
+      // อัลกอริทึม Fisher-Yates สำหรับสุ่มสลับตำแหน่งข้อมูล
+      const shuffled = [...data];
+      for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+      }
+
+      setProfiles(shuffled);
       setCurrentIndex(0);
       setCardPhotoIndex(0);
       setHistoryStack([]);
     }
+    setIsRefreshingDiscover(false);
   };
 
   const fetchMatches = async () => {
+    setIsRefreshingMatches(true);
     const { data: myLikes } = await supabase
       .from('likes')
       .select('liked_user_id')
@@ -428,6 +439,7 @@ export default function PeanutsMain({
 
     if (!myLikes || myLikes.length === 0) {
       setMatches([]);
+      setIsRefreshingMatches(false);
       return;
     }
 
@@ -475,6 +487,7 @@ export default function PeanutsMain({
     } else {
       setMatches([]);
     }
+    setIsRefreshingMatches(false);
   };
 
   const triggerSwipe = (dir: 'like' | 'pass' | 'superlike', action: () => void) => {
@@ -730,9 +743,16 @@ export default function PeanutsMain({
 
   const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
 
     const validPhotos = photos.filter((p) => p.trim() !== '');
+
+    // ตรวจสอบว่ามีรูปถ่ายอย่างน้อย 1 รูปหรือไม่
+    if (validPhotos.length === 0) {
+      alert('กรุณาอัปโหลดรูปโปรไฟล์อย่างน้อย 1 รูป ก่อนบันทึกครับ!');
+      return;
+    }
+
+    setSaving(true);
 
     const updatedData = {
       display_name: displayName,
@@ -1088,6 +1108,16 @@ export default function PeanutsMain({
                     </div>
 
                     <div className="flex items-center gap-2">
+                      {/* ปุ่มรีเฟรชหน้าค้นหา */}
+                      <button 
+                        onClick={() => fetchDiscoverProfiles(interestedIn)} 
+                        disabled={isRefreshingDiscover}
+                        className="w-9 h-9 rounded-full bg-[#121721] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-90"
+                        title="รีเฟรช / สุ่มโปรไฟล์ใหม่"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${isRefreshingDiscover ? 'animate-spin text-amber-400' : ''}`} />
+                      </button>
+
                       <button 
                         onClick={() => setShowFilterModal(true)} 
                         className="w-9 h-9 rounded-full bg-[#121721] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition"
@@ -1228,7 +1258,15 @@ export default function PeanutsMain({
                     <div className="flex-1 my-2 bg-[#121721] border border-slate-800/80 rounded-3xl flex flex-col items-center justify-center p-6 text-center">
                       <Sparkles className="w-12 h-12 text-slate-600 mb-3" />
                       <p className="text-sm font-bold text-slate-300">ไม่มีโปรไฟล์เพิ่มเติมในขณะนี้</p>
-                      <p className="text-xs text-slate-500 mt-1">ลองเปลี่ยนตัวกรอง "อยากปัดเจอเพศไหน" ในเมนูด้านบนเพื่อค้นหาใหม่ดูครับ</p>
+                      <p className="text-xs text-slate-500 mt-1 mb-4">ลองกดรีเฟรชหรือเปลี่ยนตัวกรอง "อยากปัดเจอเพศไหน" เพื่อค้นหาใหม่ดูครับ</p>
+                      <button 
+                        onClick={() => fetchDiscoverProfiles(interestedIn)}
+                        disabled={isRefreshingDiscover}
+                        className="px-4 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs font-bold text-slate-300 hover:text-white flex items-center gap-2 transition"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingDiscover ? 'animate-spin text-amber-400' : ''}`} />
+                        โหลดโปรไฟล์ใหม่
+                      </button>
                     </div>
                   )}
                 </div>
@@ -1242,27 +1280,39 @@ export default function PeanutsMain({
                       <MessageSquare className="w-5 h-5 text-emerald-400" /> คู่ Match ของคุณ ({matches.length})
                     </h2>
                     
-                    <button
-                      onClick={handleTogglePushNotification}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition shadow-md ${
-                        isPushSubscribed 
-                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' 
-                          : 'bg-[#121721] border-slate-800 text-slate-400 hover:text-white'
-                      }`}
-                      title={isPushSubscribed ? "คลิกเพื่อปิดการแจ้งเตือน" : "คลิกเพื่อเปิดการแจ้งเตือน"}
-                    >
-                      {isPushSubscribed ? (
-                        <>
-                          <Bell className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-                          <span>เปิดแจ้งเตือนแล้ว</span>
-                        </>
-                      ) : (
-                        <>
-                          <BellOff className="w-3.5 h-3.5 text-slate-400" />
-                          <span>ปิดแจ้งเตือนอยู่</span>
-                        </>
-                      )}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {/* ปุ่มรีเฟรชรายการคู่ Match */}
+                      <button
+                        onClick={fetchMatches}
+                        disabled={isRefreshingMatches}
+                        className="w-8 h-8 rounded-full bg-[#121721] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-90"
+                        title="รีเฟรชรายการคู่ Match"
+                      >
+                        <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingMatches ? 'animate-spin text-amber-400' : ''}`} />
+                      </button>
+
+                      <button
+                        onClick={handleTogglePushNotification}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition shadow-md ${
+                          isPushSubscribed 
+                            ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' 
+                            : 'bg-[#121721] border-slate-800 text-slate-400 hover:text-white'
+                        }`}
+                        title={isPushSubscribed ? "คลิกเพื่อปิดการแจ้งเตือน" : "คลิกเพื่อเปิดการแจ้งเตือน"}
+                      >
+                        {isPushSubscribed ? (
+                          <>
+                            <Bell className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                            <span>เปิดแจ้งเตือนแล้ว</span>
+                          </>
+                        ) : (
+                          <>
+                            <BellOff className="w-3.5 h-3.5 text-slate-400" />
+                            <span>ปิดแจ้งเตือนอยู่</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
                   </div>
                   
                   {matches.length > 0 ? (
@@ -1343,7 +1393,7 @@ export default function PeanutsMain({
 
                   <div className="bg-[#121721] border border-slate-800 rounded-2xl p-4 space-y-3">
                     <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
-                      รูปโปรไฟล์ของคุณ (สูงสุด 3 รูป)
+                      รูปโปรไฟล์ของคุณ (ต้องมีอย่างน้อย 1 รูป, สูงสุด 3 รูป)
                     </label>
                     <div className="grid grid-cols-3 gap-2">
                       {photos.map((photoUrl, idx) => (
