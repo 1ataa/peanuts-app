@@ -983,21 +983,25 @@ export default function PeanutsMain({
           </div>
         )}
 
-        {/* --- FILTER MODAL --- */}
+       {/* --- FILTER & GUIDE MODAL --- */}
         {showFilterModal && (
           <div className="absolute inset-0 bg-slate-950/90 z-50 flex flex-col justify-end backdrop-blur-md animate-in slide-in-from-bottom duration-300">
-            <div className="bg-[#121721] border-t border-slate-800 rounded-t-3xl p-6 space-y-5">
-              <div className="flex justify-between items-center">
+            <div className="bg-[#121721] border-t border-slate-800 rounded-t-3xl p-6 space-y-6 max-h-[85vh] overflow-y-auto">
+              {/* Header Modal */}
+              <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                  <SlidersHorizontal className="w-4 h-4 text-amber-400" /> ตัวกรองการค้นหา
+                  <SlidersHorizontal className="w-4 h-4 text-amber-400" /> ตั้งค่า & คู่มือการใช้งาน
                 </h3>
                 <button onClick={() => setShowFilterModal(false)} className="p-1 text-slate-400 hover:text-white">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
+              {/* ส่วนที่ 1: ตัวกรองการค้นหา (คงเดิมไว้) */}
               <div>
-                <label className="text-xs text-slate-400 font-medium block mb-2">อยากปัดเจอเพศไหน</label>
+                <label className="text-xs text-slate-300 font-bold block mb-2">
+                  🔍 อยากปัดเจอเพศไหน
+                </label>
                 <div className="grid grid-cols-3 gap-2">
                   {[
                     { id: 'all', label: 'ทั้งหมด / ทุกเพศ' },
@@ -1020,6 +1024,39 @@ export default function PeanutsMain({
                       {opt.label}
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* ส่วนที่ 2: เพิ่มคู่มือการแชร์ลงหน้าจอโฮม (iOS & Android) */}
+              <div className="pt-2 border-t border-slate-800/80 space-y-3">
+                <label className="text-xs text-amber-400 font-bold block">
+                  📱 วิธีเพิ่มแอปไปยังหน้าจอโฮม (เพื่อรับการแจ้งเตือน)
+                </label>
+
+                <div className="space-y-2 text-[11px] font-sans">
+                  {/* iOS Guide */}
+                  <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                    <span className="font-bold text-slate-200 flex items-center gap-1">
+                       สำหรับ iPhone / iPad (Safari):
+                    </span>
+                    <ol className="list-decimal list-inside text-slate-400 space-y-0.5 pl-1 leading-relaxed">
+                      <li>กดปุ่มแชร์ <span className="text-white">📤</span> บริเวณด้านล่างของจอ Safari</li>
+                      <li>เลื่อนลงมาเลือก <span className="text-white font-medium">"เพิ่มไปยังหน้าจอโฮม"</span> (Add to Home Screen)</li>
+                      <li>กด <span className="text-emerald-400 font-medium">"เพิ่ม"</span> ที่มุมขวาบน</li>
+                    </ol>
+                  </div>
+
+                  {/* Android Guide */}
+                  <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
+                    <span className="font-bold text-slate-200 flex items-center gap-1">
+                       สำหรับ Android (Chrome):
+                    </span>
+                    <ol className="list-decimal list-inside text-slate-400 space-y-0.5 pl-1 leading-relaxed">
+                      <li>กดปุ่มเมนู 3 จุด <span className="text-white font-bold">⋮</span> ที่มุมขวาบนของ Chrome</li>
+                      <li>เลือก <span className="text-white font-medium">"เพิ่มไปยังหน้าจอโฮม"</span> หรือ <span className="text-white font-medium">"ติดตั้งแอป"</span></li>
+                      <li>กด <span className="text-emerald-400 font-medium">"เพิ่ม"</span> เพื่อยืนยัน</li>
+                    </ol>
+                  </div>
                 </div>
               </div>
             </div>
