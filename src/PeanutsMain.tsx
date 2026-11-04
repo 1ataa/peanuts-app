@@ -87,11 +87,10 @@ export default function PeanutsMain({
   const audioChunksRef = useRef<Blob[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
- // ตรวจสอบสถานะ Push Subscription & ดึงค่าจาก localStorage
+  // ตรวจสอบสถานะ Push Subscription & ผูก OneSignal Login ID
   useEffect(() => {
     const checkNotificationStatus = async () => {
       try {
-        // 1. ดึงสถานะที่เคยเซฟไว้ในเครื่องมาก่อน
         const savedSubState = localStorage.getItem('peanuts_push_subscribed');
         if (savedSubState !== null) {
           setIsPushSubscribed(savedSubState === 'true');
@@ -107,7 +106,6 @@ export default function PeanutsMain({
             const optedIn = OneSignal.User.PushSubscription.optedIn;
             const subId = OneSignal.User.PushSubscription.id;
             
-            // อัปเดต State ตาม OneSignal จริงและจำลง localStorage
             setIsPushSubscribed(!!optedIn);
             localStorage.setItem('peanuts_push_subscribed', String(!!optedIn));
 
@@ -118,10 +116,18 @@ export default function PeanutsMain({
                 .eq('id', session.user.id);
             }
 
-            OneSignal.User.PushSubscription.addEventListener("change", (event: any) => {
+            OneSignal.User.PushSubscription.addEventListener("change", async (event: any) => {
               const isOptedIn = !!event.current?.optedIn;
               setIsPushSubscribed(isOptedIn);
               localStorage.setItem('peanuts_push_subscribed', String(isOptedIn));
+
+              const currentSubId = OneSignal.User.PushSubscription.id;
+              if (isOptedIn && currentSubId && session?.user?.id) {
+                await supabase
+                  .from('profiles')
+                  .update({ onesignal_id: currentSubId })
+                  .eq('id', session.user.id);
+              }
             });
           }
         }
@@ -132,7 +138,7 @@ export default function PeanutsMain({
     checkNotificationStatus();
   }, [session]);
 
-// ฟังก์ชันสลับเปิด/ปิดการแจ้งเตือน (พร้อมบันทึกลง localStorage)
+  // ฟังก์ชันสลับเปิด/ปิดการแจ้งเตือน (พร้อมบันทึกลง localStorage)
   const handleTogglePushNotification = async () => {
     try {
       const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -174,7 +180,6 @@ export default function PeanutsMain({
           setIsPushSubscribed(true);
           localStorage.setItem('peanuts_push_subscribed', 'true');
 
-          // อัปเดต onesignal_id ลง Supabase ทันทีตอนกดเปิด
           const subId = OneSignal.User.PushSubscription.id;
           if (subId && session?.user?.id) {
             await supabase
@@ -193,41 +198,27 @@ export default function PeanutsMain({
     }
   };
 
-      const OneSignal = (window as any).OneSignal;
-      if (OneSignal?.User?.PushSubscription) {
-        if (isPushSubscribed) {
-          await OneSignal.User.PushSubscription.optOut();
-          setIsPushSubscribed(false);
-        } else {
-          await OneSignal.User.PushSubscription.optIn();
-          setIsPushSubscribed(true);
-        }
-      } else {
-        setIsPushSubscribed(!isPushSubscribed);
+  // ยิง Push Notification ผ่าน Supabase Edge Function (ปลอดภัย 100%)
+const sendPushToDevice = async (targetUserId: string, title: string, messageText: string) => {
+  try {
+    console.log('🚀 Triggering send-push function for:', targetUserId);
+    const { data, error } = await supabase.functions.invoke('send-push', {
+      body: {
+        targetUserId,
+        title,
+        messageText
       }
-    } catch (err) {
-      console.error("Toggle notification failed:", err);
-    }
-  };
+    });
 
-// ยิง Push Notification ผ่าน Supabase Edge Function (ปลอดภัย 100%)
-  const sendPushToDevice = async (targetUserId: string, title: string, messageText: string) => {
-    try {
-      const { error } = await supabase.functions.invoke('send-push', {
-        body: {
-          targetUserId,
-          title,
-          messageText
-        }
-      });
-
-      if (error) {
-        console.error('Edge Function Push Error:', error);
-      }
-    } catch (err) {
-      console.error('Push send failed:', err);
+    if (error) {
+      console.error('Edge Function Push Error:', error);
+    } else {
+      console.log('Push success:', data);
     }
-  };
+  } catch (err) {
+    console.error('Push send failed:', err);
+  }
+};
 
   const playNotificationSound = () => {
     try {
@@ -930,7 +921,7 @@ export default function PeanutsMain({
       sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', '📷 ส่งรูปภาพถึงคุณ');
     } catch (err) {
       console.error('Chat image upload error:', err);
-    } finally {
+    } fontFinally: {
       setUploadingChatImage(false);
     }
   };
@@ -1010,11 +1001,10 @@ export default function PeanutsMain({
           </div>
         )}
 
-       {/* --- FILTER & GUIDE MODAL --- */}
+        {/* --- FILTER & GUIDE MODAL --- */}
         {showFilterModal && (
           <div className="absolute inset-0 bg-slate-950/90 z-50 flex flex-col justify-end backdrop-blur-md animate-in slide-in-from-bottom duration-300">
             <div className="bg-[#121721] border-t border-slate-800 rounded-t-3xl p-6 space-y-6 max-h-[85vh] overflow-y-auto">
-              {/* Header Modal */}
               <div className="flex justify-between items-center border-b border-slate-800 pb-3">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <SlidersHorizontal className="w-4 h-4 text-amber-400" /> ตั้งค่า & คู่มือการใช้งาน
@@ -1024,7 +1014,6 @@ export default function PeanutsMain({
                 </button>
               </div>
 
-              {/* ส่วนที่ 1: ตัวกรองการค้นหา (คงเดิมไว้) */}
               <div>
                 <label className="text-xs text-slate-300 font-bold block mb-2">
                   🔍 อยากปัดเจอเพศไหน
@@ -1054,17 +1043,15 @@ export default function PeanutsMain({
                 </div>
               </div>
 
-              {/* ส่วนที่ 2: เพิ่มคู่มือการแชร์ลงหน้าจอโฮม (iOS & Android) */}
               <div className="pt-2 border-t border-slate-800/80 space-y-3">
                 <label className="text-xs text-amber-400 font-bold block">
                   📱 วิธีเพิ่มแอปไปยังหน้าจอโฮม (เพื่อรับการแจ้งเตือน)
                 </label>
 
                 <div className="space-y-2 text-[11px] font-sans">
-                  {/* iOS Guide */}
                   <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
                     <span className="font-bold text-slate-200 flex items-center gap-1">
-                       สำหรับ iPhone / iPad (Safari):
+                      สำหรับ iPhone / iPad (Safari):
                     </span>
                     <ol className="list-decimal list-inside text-slate-400 space-y-0.5 pl-1 leading-relaxed">
                       <li>กดปุ่มแชร์ <span className="text-white">📤</span> บริเวณด้านล่างของจอ Safari</li>
@@ -1073,10 +1060,9 @@ export default function PeanutsMain({
                     </ol>
                   </div>
 
-                  {/* Android Guide */}
                   <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-1">
                     <span className="font-bold text-slate-200 flex items-center gap-1">
-                       สำหรับ Android (Chrome):
+                      สำหรับ Android (Chrome):
                     </span>
                     <ol className="list-decimal list-inside text-slate-400 space-y-0.5 pl-1 leading-relaxed">
                       <li>กดปุ่มเมนู 3 จุด <span className="text-white font-bold">⋮</span> ที่มุมขวาบนของ Chrome</li>
@@ -1131,7 +1117,7 @@ export default function PeanutsMain({
           </div>
         )}
 
-        {/* --- SELECTED PROFILE DETAIL MODAL (WITH REPORT & BLOCK) --- */}
+        {/* --- SELECTED PROFILE DETAIL MODAL --- */}
         {selectedProfile && (
           <div className="absolute inset-0 bg-slate-950/95 z-50 flex flex-col overflow-y-auto p-4 backdrop-blur-md">
             <div className="flex justify-between items-center mb-3">
@@ -1243,7 +1229,7 @@ export default function PeanutsMain({
           </div>
         )}
 
-        {/* --- ACTIVE MATCH CHAT VIEW (WITH REALTIME UNSEND) --- */}
+        {/* --- ACTIVE MATCH CHAT VIEW --- */}
         {activeChat ? (
           <div className="h-full flex flex-col bg-slate-950 overflow-hidden">
             <header className="px-4 py-3 bg-[#121721] border-b border-slate-800 flex items-center justify-between shrink-0 z-10">
@@ -1300,7 +1286,6 @@ export default function PeanutsMain({
 
                 return (
                   <div key={m.id} className={`flex items-center gap-1.5 group ${isMe ? 'justify-end' : 'justify-start'}`}>
-                    {/* ปุ่ม Unsend ข้อความ (เฉพาะฝั่งผู้ส่ง) */}
                     {isMe && (
                       <button
                         onClick={() => handleUnsendMessage(m.id)}

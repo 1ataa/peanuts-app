@@ -14,57 +14,52 @@ serve(async (req) => {
   try {
     const { targetUserId, title, messageText } = await req.json();
 
-    if (!targetUserId || !title || !messageText) {
-      return new Response(JSON.stringify({ error: 'Missing required fields' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      });
-    }
+    const supabaseAdmin = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    );
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    const onesignalAppId = Deno.env.get('ONESIGNAL_APP_ID') ?? 'b0557601-dffe-4e26-8e78-b0695de8b150';
-    const onesignalRestKey = Deno.env.get('ONESIGNAL_REST_KEY') ?? '';
-
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-    const { data: targetProfile } = await supabase
+    const { data: targetProfile } = await supabaseAdmin
       .from('profiles')
       .select('onesignal_id')
       .eq('id', targetUserId)
       .single();
 
-    const payload: any = {
-      app_id: onesignalAppId,
-      headings: { en: title, th: title },
-      contents: { en: messageText, th: messageText },
-    };
-
-    if (targetProfile?.onesignal_id) {
-      payload.include_subscription_ids = [targetProfile.onesignal_id];
-    } else {
-      payload.include_external_user_ids = [targetUserId];
+    if (!targetProfile?.onesignal_id) {
+      return new Response(JSON.stringify({ error: 'Target user has no onesignal_id' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      });
     }
 
-    const cleanRestKey = onesignalRestKey.replace(/^Key\s+/i, '');
+    const restKey = Deno.env.get('ONESIGNAL_REST_KEY') || '';
+    const appId = Deno.env.get('ONESIGNAL_APP_ID') || '';
 
-    const response = await fetch('https://onesignal.com/api/v1/notifications', {
+    // รองรับทั้ง Key รูปแบบใหม่ (os_v2_app_...) และรูปแบบเดิม
+    const authHeader = restKey.startsWith('os_v2_app_') ? `Key ${restKey}` : `Basic ${restKey}`;
+
+    const onesignalRes = await fetch('https://onesignal.com/api/v1/notifications', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',
-        'Authorization': `Basic ${cleanRestKey}`,
+        'Authorization': authHeader
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({
+        app_id: appId,
+        include_subscription_ids: [targetProfile.onesignal_id],
+        headings: { en: title, th: title },
+        contents: { en: messageText, th: messageText }
+      })
     });
 
-    const resData = await response.json();
+    const resData = await onesignalRes.json();
 
     return new Response(JSON.stringify({ success: true, resData }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     });
-  } catch (error) {
-    return new Response(JSON.stringify({ error: error.message }), {
+  } catch (err: any) {
+    return new Response(JSON.stringify({ error: err.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,
     });
