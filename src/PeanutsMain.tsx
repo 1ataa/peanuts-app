@@ -871,11 +871,11 @@ export default function PeanutsMain({
       });
 
       sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', '📷 ส่งรูปภาพถึงคุณ');
-    } catch (err) {
-      console.error('Chat image upload error:', err);
-    } fontically {
-      setUploadingChatImage(false);
-    }
+} catch (err) {
+  console.error('Chat image upload error:', err);
+} finally {
+  setUploadingChatImage(false);
+}
   };
 
   const handleRemovePhoto = (slotIndex: number) => {
