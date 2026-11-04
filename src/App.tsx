@@ -18,29 +18,15 @@ export default function App() {
   const [viewMode, setViewMode] = useState<'landing' | 'otp' | 'public_chat'>('landing');
 
   useEffect(() => {
-  OneSignal.init({
-    appId: ONESIGNAL_APP_ID,
-    allowLocalhostAsSecureOrigin: true,
-    serviceWorkerPath: "OneSignalSDKWorker.js", // 👈 เพิ่มบรรทัดนี้
-    serviceWorkerParam: { scope: "/" },         // 👈 เพิ่มบรรทัดนี้
-  }).then(() => {
-    OneSignal.Notifications.requestPermission();
-  });
-
-  supabase.auth.getSession().then(({ data: { session } }) => {
-    setSession(session);
-    if (session?.user) saveOneSignalSubscription(session.user.id);
-    setLoading(false);
-  });
-
-  const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-    setSession(session);
-    if (session?.user) saveOneSignalSubscription(session.user.id);
-    setLoading(false);
-  });
-
-  return () => subscription.unsubscribe();
-}, []);
+    // 🟢 Initialize OneSignal & ขอสิทธิ์ส่งแจ้งเตือน
+    OneSignal.init({
+      appId: ONESIGNAL_APP_ID,
+      allowLocalhostAsSecureOrigin: true,
+      serviceWorkerPath: "OneSignalSDKWorker.js",
+      serviceWorkerParam: { scope: "/" },
+    }).then(() => {
+      OneSignal.Notifications.requestPermission();
+    });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
