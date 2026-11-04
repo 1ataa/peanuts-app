@@ -94,7 +94,6 @@ export default function PeanutsMain({
       try {
         const OneSignal = (window as any).OneSignal;
         if (OneSignal) {
-          // ผูก User ID กับ OneSignal เพื่อให้ระบุส่ง Push ไปยัง External ID ได้
           if (session?.user?.id) {
             await OneSignal.login(session.user.id);
           }
@@ -104,7 +103,6 @@ export default function PeanutsMain({
             const subId = OneSignal.User.PushSubscription.id;
             setIsPushSubscribed(!!optedIn);
 
-            // อัปเดต OneSignal ID เข้า Supabase Profile
             if (subId && session?.user?.id) {
               await supabase
                 .from('profiles')
@@ -170,7 +168,7 @@ export default function PeanutsMain({
     }
   };
 
-  // ยิง Push Notification ผ่าน OneSignal REST API (รองรับทั้ง External ID และ Subscription ID)
+  // ยิง Push Notification ผ่าน OneSignal REST API
   const sendPushToDevice = async (targetUserId: string, title: string, messageText: string) => {
     try {
       const { data: targetProfile } = await supabase
@@ -278,7 +276,6 @@ export default function PeanutsMain({
     });
   };
 
-  // โหลดข้อมูลบล็อก
   const fetchBlockedUsers = async () => {
     if (!session?.user?.id) return [];
     const { data } = await supabase
@@ -291,7 +288,6 @@ export default function PeanutsMain({
     return blockedIds;
   };
 
-  // รายงานผู้ใช้งาน (Report System)
   const handleReportUser = async (targetUser: any) => {
     const reason = prompt(`กรุณาระบุเหตุผลในการรายงาน ${targetUser.display_name}:`);
     if (!reason || !reason.trim()) return;
@@ -309,7 +305,6 @@ export default function PeanutsMain({
     }
   };
 
-  // บล็อกผู้ใช้งาน (Block System)
   const handleBlockUser = async (targetUser: any) => {
     if (!confirm(`คุณต้องการบล็อก ${targetUser.display_name} หรือไม่? (จะไม่เห็นโปรไฟล์กันและกันอีกต่อไป)`)) return;
 
@@ -331,7 +326,6 @@ export default function PeanutsMain({
     }
   };
 
-  // ยกเลิกการบล็อก
   const handleUnblockUser = async (targetUserId: string) => {
     await supabase
       .from('blocks')
@@ -411,7 +405,7 @@ export default function PeanutsMain({
     };
   }, [session, activeChat, blockedUserIds]);
 
-  // Realtime Chat: รองรับการดักจับทั้ง INSERT และ DELETE (Unsend)
+  // Realtime Chat Listener: รองรับทั้งการส่งข้อความใหม่ (INSERT) และยกเลิกข้อความ (DELETE)
   useEffect(() => {
     if (!activeChat || !session?.user) return;
 
@@ -421,22 +415,27 @@ export default function PeanutsMain({
       .channel(`match_chat_${activeChat.id}`)
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'messages' },
+        { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
-          if (payload.eventType === 'INSERT') {
-            const newMsg = payload.new as any;
-            if (
-              (newMsg.sender_id === session.user.id && newMsg.receiver_id === activeChat.id) ||
-              (newMsg.sender_id === activeChat.id && newMsg.receiver_id === session.user.id)
-            ) {
-              setMessages((prev) => {
-                if (prev.some((m) => m.id === newMsg.id.toString())) return prev;
-                return [...prev, newMsg];
-              });
-            }
-          } else if (payload.eventType === 'DELETE') {
-            const deletedMsgId = payload.old.id;
-            setMessages((prev) => prev.filter((m) => m.id !== deletedMsgId));
+          const newMsg = payload.new as any;
+          if (
+            (newMsg.sender_id === session.user.id && newMsg.receiver_id === activeChat.id) ||
+            (newMsg.sender_id === activeChat.id && newMsg.receiver_id === session.user.id)
+          ) {
+            setMessages((prev) => {
+              if (prev.some((m) => m.id.toString() === newMsg.id.toString())) return prev;
+              return [...prev, newMsg];
+            });
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'messages' },
+        (payload) => {
+          const deletedId = payload.old?.id;
+          if (deletedId) {
+            setMessages((prev) => prev.filter((m) => m.id.toString() !== deletedId.toString()));
           }
         }
       )
@@ -494,7 +493,6 @@ export default function PeanutsMain({
     }
   };
 
-  // ดึงโปรไฟล์ คัดกรองไอดีที่บล็อก และ Shuffle
   const fetchDiscoverProfiles = async (targetGender: string, overrideBlocked?: string[]) => {
     setIsRefreshingDiscover(true);
     const currentBlocked = overrideBlocked || blockedUserIds;
@@ -507,7 +505,6 @@ export default function PeanutsMain({
     const swipedIds = myLikes ? myLikes.map((l) => l.liked_user_id) : [];
     swipedIds.push(session.user.id);
 
-    // รวมรายการที่สไวป์แล้วและไอดีที่บล็อกไว้
     const excludeIds = Array.from(new Set([...swipedIds, ...currentBlocked]));
 
     let query = supabase
@@ -685,7 +682,6 @@ export default function PeanutsMain({
     const textToSend = chatInput.trim();
     setChatInput('');
 
-    // Optimistic Update UI ทันที
     const tempMsg = {
       id: `temp_${Date.now()}`,
       sender_id: session.user.id,
@@ -707,14 +703,12 @@ export default function PeanutsMain({
     }
   };
 
-  // ยกเลิกการส่งข้อความ (Unsend Message - ได้ทั้งข้อความ เสียง และรูปภาพ)
+  // ฟังก์ชันยกเลิกการส่งข้อความ (Unsend Message - ลบ Realtime ทั้งสองฝั่ง)
   const handleUnsendMessage = async (messageId: string) => {
-    if (!confirm('คุณต้องการยกเลิกการส่งข้อความนี้ใช่หรือไม่?')) return;
+    if (!confirm('คุณต้องการยกเลิกการส่งข้อความนี้ใช่หรือไม่? (อีกฝ่ายจะไม่เห็นข้อความนี้อีกต่อไป)')) return;
 
-    // ลบจาก UI ทันที
-    setMessages((prev) => prev.filter((m) => m.id !== messageId));
+    setMessages((prev) => prev.filter((m) => m.id.toString() !== messageId.toString()));
 
-    // ลบใน Supabase
     const { error } = await supabase
       .from('messages')
       .delete()
@@ -723,7 +717,7 @@ export default function PeanutsMain({
 
     if (error) {
       alert('ไม่สามารถยกเลิกข้อความได้: ' + error.message);
-      fetchMessages(activeChat.id); // คืนค่าหากลบไม่สำเร็จ
+      if (activeChat) fetchMessages(activeChat.id);
     }
   };
 
@@ -879,7 +873,7 @@ export default function PeanutsMain({
       sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', '📷 ส่งรูปภาพถึงคุณ');
     } catch (err) {
       console.error('Chat image upload error:', err);
-    } finally {
+    } fontically {
       setUploadingChatImage(false);
     }
   };
@@ -1054,7 +1048,6 @@ export default function PeanutsMain({
                 <ArrowLeft className="w-4 h-4" /> ย้อนกลับ
               </button>
 
-              {/* ปุ่ม Report & Block สำหรับผู้ใช้อื่น */}
               {selectedProfile.id !== session.user.id && (
                 <div className="flex items-center gap-2">
                   <button
@@ -1156,7 +1149,7 @@ export default function PeanutsMain({
           </div>
         )}
 
-        {/* --- ACTIVE MATCH CHAT VIEW (WITH UNSEND BUTTON) --- */}
+        {/* --- ACTIVE MATCH CHAT VIEW (WITH REALTIME UNSEND) --- */}
         {activeChat ? (
           <div className="h-full flex flex-col bg-slate-950 overflow-hidden">
             <header className="px-4 py-3 bg-[#121721] border-b border-slate-800 flex items-center justify-between shrink-0 z-10">
@@ -1213,7 +1206,7 @@ export default function PeanutsMain({
 
                 return (
                   <div key={m.id} className={`flex items-center gap-1.5 group ${isMe ? 'justify-end' : 'justify-start'}`}>
-                    {/* ปุ่ม Unsend ข้อความ สำหรับฝั่งผู้ส่ง */}
+                    {/* ปุ่ม Unsend ข้อความ (เฉพาะฝั่งผู้ส่ง) */}
                     {isMe && (
                       <button
                         onClick={() => handleUnsendMessage(m.id)}
