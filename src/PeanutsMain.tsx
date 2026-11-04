@@ -704,19 +704,21 @@ export default function PeanutsMain({
   };
 
   // ฟังก์ชันยกเลิกการส่งข้อความ (Unsend Message - ลบ Realtime ทั้งสองฝั่ง)
-  const handleUnsendMessage = async (messageId: string) => {
-    if (!confirm('คุณต้องการยกเลิกการส่งข้อความนี้ใช่หรือไม่? (อีกฝ่ายจะไม่เห็นข้อความนี้อีกต่อไป)')) return;
+const handleUnsendMessage = async (messageId: string) => {
+    if (!confirm('คุณต้องการยกเลิกการส่งข้อความนี้ใช่หรือไม่?')) return;
 
+    // 1. ลบออกจาก UI ฝั่งตัวเองทันที (Optimistic UI)
     setMessages((prev) => prev.filter((m) => m.id.toString() !== messageId.toString()));
 
+    // 2. สั่งลบใน Supabase โดยระบุทั้ง id และ sender_id
     const { error } = await supabase
       .from('messages')
       .delete()
-      .eq('id', messageId)
-      .eq('sender_id', session.user.id);
+      .match({ id: messageId, sender_id: session.user.id });
 
     if (error) {
-      alert('ไม่สามารถยกเลิกข้อความได้: ' + error.message);
+      alert('ลบข้อความไม่สำเร็จ: ' + error.message);
+      // หากลบไม่สำเร็จ ให้โหลดข้อความกลับมา
       if (activeChat) fetchMessages(activeChat.id);
     }
   };
