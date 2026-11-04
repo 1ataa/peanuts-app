@@ -87,10 +87,16 @@ export default function PeanutsMain({
   const audioChunksRef = useRef<Blob[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // ตรวจสอบสถานะ Push Subscription & ผูก OneSignal Login ID
+ // ตรวจสอบสถานะ Push Subscription & ดึงค่าจาก localStorage
   useEffect(() => {
     const checkNotificationStatus = async () => {
       try {
+        // 1. ดึงสถานะที่เคยเซฟไว้ในเครื่องมาก่อน
+        const savedSubState = localStorage.getItem('peanuts_push_subscribed');
+        if (savedSubState !== null) {
+          setIsPushSubscribed(savedSubState === 'true');
+        }
+
         const OneSignal = (window as any).OneSignal;
         if (OneSignal) {
           if (session?.user?.id) {
@@ -100,7 +106,10 @@ export default function PeanutsMain({
           if (OneSignal.User?.PushSubscription) {
             const optedIn = OneSignal.User.PushSubscription.optedIn;
             const subId = OneSignal.User.PushSubscription.id;
+            
+            // อัปเดต State ตาม OneSignal จริงและจำลง localStorage
             setIsPushSubscribed(!!optedIn);
+            localStorage.setItem('peanuts_push_subscribed', String(!!optedIn));
 
             if (subId && session?.user?.id) {
               await supabase
@@ -110,7 +119,9 @@ export default function PeanutsMain({
             }
 
             OneSignal.User.PushSubscription.addEventListener("change", (event: any) => {
-              setIsPushSubscribed(!!event.current?.optedIn);
+              const isOptedIn = !!event.current?.optedIn;
+              setIsPushSubscribed(isOptedIn);
+              localStorage.setItem('peanuts_push_subscribed', String(isOptedIn));
             });
           }
         }
@@ -121,7 +132,7 @@ export default function PeanutsMain({
     checkNotificationStatus();
   }, [session]);
 
-  // ฟังก์ชันสลับเปิด/ปิดการแจ้งเตือน
+// ฟังก์ชันสลับเปิด/ปิดการแจ้งเตือน (พร้อมบันทึกลง localStorage)
   const handleTogglePushNotification = async () => {
     try {
       const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -142,13 +153,45 @@ export default function PeanutsMain({
         return;
       }
 
-      if (Notification.permission === 'default') {
-        const permission = await Notification.requestPermission();
-        if (permission !== 'granted') {
+      let perm = Notification.permission;
+      if (perm === 'default') {
+        perm = await Notification.requestPermission();
+        if (perm !== 'granted') {
           setIsPushSubscribed(false);
+          localStorage.setItem('peanuts_push_subscribed', 'false');
           return;
         }
       }
+
+      const OneSignal = (window as any).OneSignal;
+      if (OneSignal?.User?.PushSubscription) {
+        if (isPushSubscribed) {
+          await OneSignal.User.PushSubscription.optOut();
+          setIsPushSubscribed(false);
+          localStorage.setItem('peanuts_push_subscribed', 'false');
+        } else {
+          await OneSignal.User.PushSubscription.optIn();
+          setIsPushSubscribed(true);
+          localStorage.setItem('peanuts_push_subscribed', 'true');
+
+          // อัปเดต onesignal_id ลง Supabase ทันทีตอนกดเปิด
+          const subId = OneSignal.User.PushSubscription.id;
+          if (subId && session?.user?.id) {
+            await supabase
+              .from('profiles')
+              .update({ onesignal_id: subId })
+              .eq('id', session.user.id);
+          }
+        }
+      } else {
+        const newState = !isPushSubscribed;
+        setIsPushSubscribed(newState);
+        localStorage.setItem('peanuts_push_subscribed', String(newState));
+      }
+    } catch (err) {
+      console.error("Toggle notification failed:", err);
+    }
+  };
 
       const OneSignal = (window as any).OneSignal;
       if (OneSignal?.User?.PushSubscription) {
