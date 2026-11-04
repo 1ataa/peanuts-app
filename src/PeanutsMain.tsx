@@ -167,11 +167,7 @@ export default function PeanutsMain({
     }
   };
 
-<<<<<<< HEAD
- // ยิง Push Notification ผ่าน Supabase Edge Function (ปลอดภัย 100%)
-=======
-  // ยิง Push Notification ผ่าน OneSignal REST API
->>>>>>> 3d77ddbc8e19f5178639c81ba14a24e4adda3c4f
+// ยิง Push Notification ผ่าน Supabase Edge Function (ปลอดภัย 100%)
   const sendPushToDevice = async (targetUserId: string, title: string, messageText: string) => {
     try {
       const { error } = await supabase.functions.invoke('send-push', {
@@ -182,31 +178,9 @@ export default function PeanutsMain({
         }
       });
 
-<<<<<<< HEAD
       if (error) {
         console.error('Edge Function Push Error:', error);
-=======
-      const payload: any = {
-        app_id: ONESIGNAL_APP_ID,
-        headings: { en: title, th: title },
-        contents: { en: messageText, th: messageText },
-        include_aliases: { external_id: [targetUserId] },
-        target_channel: "push"
-      };
-
-      if (targetProfile?.onesignal_id) {
-        payload.include_subscription_ids = [targetProfile.onesignal_id];
->>>>>>> 3d77ddbc8e19f5178639c81ba14a24e4adda3c4f
       }
-
-      await fetch('https://onesignal.com/api/v1/notifications', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json; charset=utf-8',
-          'Authorization': `Key ${ONESIGNAL_REST_KEY}`
-        },
-        body: JSON.stringify(payload)
-      });
     } catch (err) {
       console.error('Push send failed:', err);
     }
