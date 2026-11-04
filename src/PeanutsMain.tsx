@@ -704,21 +704,18 @@ export default function PeanutsMain({
   };
 
   // ฟังก์ชันยกเลิกการส่งข้อความ (Unsend Message - ลบ Realtime ทั้งสองฝั่ง)
-const handleUnsendMessage = async (messageId: string) => {
-    if (!confirm('คุณต้องการยกเลิกการส่งข้อความนี้ใช่หรือไม่?')) return;
+  const handleUnsendMessage = async (messageId: string) => {
+    if (!confirm('คุณต้องการยกเลิกการส่งข้อความนี้ใช่หรือไม่? (อีกฝ่ายจะไม่เห็นข้อความนี้อีกต่อไป)')) return;
 
-    // 1. ลบออกจาก UI ฝั่งตัวเองทันที (Optimistic UI)
     setMessages((prev) => prev.filter((m) => m.id.toString() !== messageId.toString()));
 
-    // 2. สั่งลบใน Supabase โดยระบุทั้ง id และ sender_id
     const { error } = await supabase
       .from('messages')
       .delete()
       .match({ id: messageId, sender_id: session.user.id });
 
     if (error) {
-      alert('ลบข้อความไม่สำเร็จ: ' + error.message);
-      // หากลบไม่สำเร็จ ให้โหลดข้อความกลับมา
+      alert('ไม่สามารถยกเลิกข้อความได้: ' + error.message);
       if (activeChat) fetchMessages(activeChat.id);
     }
   };
@@ -779,7 +776,11 @@ const handleUnsendMessage = async (messageId: string) => {
 
     const { error: uploadError } = await supabase.storage
       .from('audio-messages')
-      .upload(fileName, blob, { contentType, upsert: true });
+      .upload(fileName, blob, { 
+        contentType, 
+        upsert: true,
+        cacheControl: '3600000'
+      });
 
     if (uploadError) {
       alert('ส่งข้อความเสียงไม่สำเร็จ: ' + uploadError.message);
@@ -799,20 +800,39 @@ const handleUnsendMessage = async (messageId: string) => {
     sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', '🎙️ ส่งข้อความเสียงถึงคุณ');
   };
 
+  // บีบอัดรูปภาพ ย่อ Resolution สูงสุด 800px เพื่อประหยัด Cached Egress
   const convertToJpeg = (file: File): Promise<Blob> => {
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (event) => {
         const img = new Image();
         img.onload = () => {
+          const MAX_WIDTH = 800;
+          const MAX_HEIGHT = 800;
+          let width = img.width;
+          let height = img.height;
+
+          if (width > height) {
+            if (width > MAX_WIDTH) {
+              height *= MAX_WIDTH / width;
+              width = MAX_WIDTH;
+            }
+          } else {
+            if (height > MAX_HEIGHT) {
+              width *= MAX_HEIGHT / height;
+              height = MAX_HEIGHT;
+            }
+          }
+
           const canvas = document.createElement('canvas');
-          canvas.width = img.width;
-          canvas.height = img.height;
+          canvas.width = width;
+          canvas.height = height;
           const ctx = canvas.getContext('2d');
-          ctx?.drawImage(img, 0, 0);
+          ctx?.drawImage(img, 0, 0, width, height);
+
           canvas.toBlob((blob) => {
             resolve(blob || file);
-          }, 'image/jpeg', 0.85);
+          }, 'image/jpeg', 0.75);
         };
         img.src = event.target?.result as string;
       };
@@ -830,7 +850,11 @@ const handleUnsendMessage = async (messageId: string) => {
 
     const { error: uploadError } = await supabase.storage
       .from('avatars')
-      .upload(fileName, imageBlob, { contentType: 'image/jpeg', upsert: true });
+      .upload(fileName, imageBlob, { 
+        contentType: 'image/jpeg', 
+        upsert: true,
+        cacheControl: '3600000'
+      });
 
     if (uploadError) {
       alert('อัปโหลดรูปไม่สำเร็จ: ' + uploadError.message);
@@ -856,7 +880,11 @@ const handleUnsendMessage = async (messageId: string) => {
 
       const { error: uploadError } = await supabase.storage
         .from('avatars')
-        .upload(fileName, imageBlob, { contentType: 'image/jpeg', upsert: true });
+        .upload(fileName, imageBlob, { 
+          contentType: 'image/jpeg', 
+          upsert: true,
+          cacheControl: '3600000'
+        });
 
       if (uploadError) {
         alert('ส่งรูปภาพไม่สำเร็จ: ' + uploadError.message);
@@ -873,11 +901,11 @@ const handleUnsendMessage = async (messageId: string) => {
       });
 
       sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', '📷 ส่งรูปภาพถึงคุณ');
-} catch (err) {
-  console.error('Chat image upload error:', err);
-} finally {
-  setUploadingChatImage(false);
-}
+    } catch (err) {
+      console.error('Chat image upload error:', err);
+    } finally {
+      setUploadingChatImage(false);
+    }
   };
 
   const handleRemovePhoto = (slotIndex: number) => {
@@ -1225,7 +1253,7 @@ const handleUnsendMessage = async (messageId: string) => {
                       {isVoice ? (
                         <audio controls preload="metadata" playsInline src={audioUrl} className="h-8 max-w-[210px] my-0.5" />
                       ) : isImage ? (
-                        <img src={imageUrl} alt="Chat Attachment" className="rounded-xl max-w-full max-h-60 object-cover my-0.5 cursor-pointer hover:opacity-95" onClick={() => window.open(imageUrl, '_blank')} />
+                        <img src={imageUrl} alt="Chat Attachment" loading="lazy" className="rounded-xl max-w-full max-h-60 object-cover my-0.5 cursor-pointer hover:opacity-95" onClick={() => window.open(imageUrl, '_blank')} />
                       ) : (
                         <span className="break-all">{m.content}</span>
                       )}
@@ -1525,7 +1553,7 @@ const handleUnsendMessage = async (messageId: string) => {
                               className="w-12 h-12 rounded-full bg-slate-800 overflow-hidden shrink-0 border border-emerald-500/30 cursor-pointer hover:opacity-80 transition relative group"
                               title="คลิกดูโปรไฟล์"
                             >
-                              <img src={getProfilePhotos(m)[0] || m.avatar_url} alt="" className="w-full h-full object-cover" />
+                              <img src={getProfilePhotos(m)[0] || m.avatar_url} alt="" loading="lazy" className="w-full h-full object-cover" />
                             </div>
 
                             <div 
