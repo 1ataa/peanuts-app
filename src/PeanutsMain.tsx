@@ -3,7 +3,8 @@ import { createClient } from '@supabase/supabase-js';
 import { 
   Flame, Heart, X, MessageSquare, User, LogOut, Sparkles, Send, 
   ArrowLeft, Loader2, Mic, Square, Plus, Trash2, 
-  ChevronLeft, ChevronRight, Star, ShieldCheck, SlidersHorizontal, Bell, RotateCcw, BellOff, Image as ImageIcon, RefreshCw
+  ChevronLeft, ChevronRight, Star, ShieldCheck, SlidersHorizontal, Bell, RotateCcw, BellOff, Image as ImageIcon, RefreshCw,
+  Flag, ShieldAlert
 } from 'lucide-react';
 
 const SUPABASE_URL = 'https://wvqdueookxtkposaeuuu.supabase.co';
@@ -49,10 +50,11 @@ export default function PeanutsMain({
   const [swipeDirection, setSwipeDirection] = useState<'like' | 'pass' | 'superlike' | 'rewind' | null>(null);
   const [isAnimating, setIsAnimating] = useState(false);
 
-  // Modals
+  // Modals & Safety
   const [selectedProfile, setSelectedProfile] = useState<any>(null);
   const [matchedUser, setMatchedUser] = useState<any>(null);
   const [showFilterModal, setShowFilterModal] = useState(false);
+  const [blockedUserIds, setBlockedUserIds] = useState<string[]>([]);
 
   // Profile Form States
   const [displayName, setDisplayName] = useState('');
@@ -86,27 +88,43 @@ export default function PeanutsMain({
   const audioChunksRef = useRef<Blob[]>([]);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // ตรวจสอบสถานะ Push Subscription
+  // ตรวจสอบสถานะ Push Subscription & ผูก OneSignal Login ID
   useEffect(() => {
-    const checkNotificationStatus = () => {
+    const checkNotificationStatus = async () => {
       try {
         const OneSignal = (window as any).OneSignal;
-        if (OneSignal?.User?.PushSubscription) {
-          const optedIn = OneSignal.User.PushSubscription.optedIn;
-          setIsPushSubscribed(!!optedIn);
+        if (OneSignal) {
+          // ผูก User ID กับ OneSignal เพื่อให้ระบุส่ง Push ไปยัง External ID ได้
+          if (session?.user?.id) {
+            await OneSignal.login(session.user.id);
+          }
 
-          OneSignal.User.PushSubscription.addEventListener("change", (event: any) => {
-            setIsPushSubscribed(!!event.current?.optedIn);
-          });
+          if (OneSignal.User?.PushSubscription) {
+            const optedIn = OneSignal.User.PushSubscription.optedIn;
+            const subId = OneSignal.User.PushSubscription.id;
+            setIsPushSubscribed(!!optedIn);
+
+            // อัปเดต OneSignal ID เข้า Supabase Profile
+            if (subId && session?.user?.id) {
+              await supabase
+                .from('profiles')
+                .update({ onesignal_id: subId })
+                .eq('id', session.user.id);
+            }
+
+            OneSignal.User.PushSubscription.addEventListener("change", (event: any) => {
+              setIsPushSubscribed(!!event.current?.optedIn);
+            });
+          }
         }
       } catch (e) {
         console.error("Notification status check error:", e);
       }
     };
     checkNotificationStatus();
-  }, []);
+  }, [session]);
 
-  // ฟังก์ชันสลับเปิด/ปิดการแจ้งเตือน (รองรับ Safari บน iOS/iPadOS)
+  // ฟังก์ชันสลับเปิด/ปิดการแจ้งเตือน
   const handleTogglePushNotification = async () => {
     try {
       const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -152,6 +170,7 @@ export default function PeanutsMain({
     }
   };
 
+  // ยิง Push Notification ผ่าน OneSignal REST API (รองรับทั้ง External ID และ Subscription ID)
   const sendPushToDevice = async (targetUserId: string, title: string, messageText: string) => {
     try {
       const { data: targetProfile } = await supabase
@@ -160,21 +179,26 @@ export default function PeanutsMain({
         .eq('id', targetUserId)
         .single();
 
+      const payload: any = {
+        app_id: ONESIGNAL_APP_ID,
+        headings: { en: title, th: title },
+        contents: { en: messageText, th: messageText },
+        include_aliases: { external_id: [targetUserId] },
+        target_channel: "push"
+      };
+
       if (targetProfile?.onesignal_id) {
-        await fetch('https://onesignal.com/api/v1/notifications', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json; charset=utf-8',
-            'Authorization': `Key ${ONESIGNAL_REST_KEY}`
-          },
-          body: JSON.stringify({
-            app_id: ONESIGNAL_APP_ID,
-            include_subscription_ids: [targetProfile.onesignal_id],
-            headings: { en: title, th: title },
-            contents: { en: messageText, th: messageText }
-          })
-        });
+        payload.include_subscription_ids = [targetProfile.onesignal_id];
       }
+
+      await fetch('https://onesignal.com/api/v1/notifications', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Authorization': `Key ${ONESIGNAL_REST_KEY}`
+        },
+        body: JSON.stringify(payload)
+      });
     } catch (err) {
       console.error('Push send failed:', err);
     }
@@ -254,10 +278,79 @@ export default function PeanutsMain({
     });
   };
 
+  // โหลดข้อมูลบล็อก
+  const fetchBlockedUsers = async () => {
+    if (!session?.user?.id) return [];
+    const { data } = await supabase
+      .from('blocks')
+      .select('blocked_user_id')
+      .eq('blocker_id', session.user.id);
+
+    const blockedIds = data ? data.map((b) => b.blocked_user_id) : [];
+    setBlockedUserIds(blockedIds);
+    return blockedIds;
+  };
+
+  // รายงานผู้ใช้งาน (Report System)
+  const handleReportUser = async (targetUser: any) => {
+    const reason = prompt(`กรุณาระบุเหตุผลในการรายงาน ${targetUser.display_name}:`);
+    if (!reason || !reason.trim()) return;
+
+    const { error } = await supabase.from('reports').insert({
+      reporter_id: session.user.id,
+      reported_user_id: targetUser.id,
+      reason: reason.trim()
+    });
+
+    if (error) {
+      alert('รายงานไม่สำเร็จ: ' + error.message);
+    } else {
+      alert('ส่งรายงานผู้ใช้เรียบร้อยแล้ว ทีมงานจะตรวจสอบโดยเร็วที่สุดครับ');
+    }
+  };
+
+  // บล็อกผู้ใช้งาน (Block System)
+  const handleBlockUser = async (targetUser: any) => {
+    if (!confirm(`คุณต้องการบล็อก ${targetUser.display_name} หรือไม่? (จะไม่เห็นโปรไฟล์กันและกันอีกต่อไป)`)) return;
+
+    const { error } = await supabase.from('blocks').insert({
+      blocker_id: session.user.id,
+      blocked_user_id: targetUser.id
+    });
+
+    if (error) {
+      alert('บล็อกไม่สำเร็จ: ' + error.message);
+    } else {
+      alert(`บล็อก ${targetUser.display_name} เรียบร้อยแล้ว`);
+      setSelectedProfile(null);
+      if (activeChat?.id === targetUser.id) setActiveChat(null);
+      const updatedBlocked = [...blockedUserIds, targetUser.id];
+      setBlockedUserIds(updatedBlocked);
+      fetchDiscoverProfiles(interestedIn, updatedBlocked);
+      fetchMatches(updatedBlocked);
+    }
+  };
+
+  // ยกเลิกการบล็อก
+  const handleUnblockUser = async (targetUserId: string) => {
+    await supabase
+      .from('blocks')
+      .delete()
+      .eq('blocker_id', session.user.id)
+      .eq('blocked_user_id', targetUserId);
+
+    const updatedBlocked = blockedUserIds.filter((id) => id !== targetUserId);
+    setBlockedUserIds(updatedBlocked);
+    fetchDiscoverProfiles(interestedIn, updatedBlocked);
+    fetchMatches(updatedBlocked);
+  };
+
   useEffect(() => {
     if (session?.user) {
       loadMyProfile();
-      fetchMatches();
+      fetchBlockedUsers().then((blockedIds) => {
+        fetchMatches(blockedIds);
+      });
     }
   }, [session]);
 
@@ -276,6 +369,8 @@ export default function PeanutsMain({
         },
         (payload) => {
           const newMsg = payload.new as any;
+          if (blockedUserIds.includes(newMsg.sender_id)) return;
+
           playNotificationSound();
 
           let msgPreview = newMsg.content;
@@ -314,8 +409,9 @@ export default function PeanutsMain({
     return () => {
       supabase.removeChannel(globalChannel);
     };
-  }, [session, activeChat]);
+  }, [session, activeChat, blockedUserIds]);
 
+  // Realtime Chat: รองรับการดักจับทั้ง INSERT และ DELETE (Unsend)
   useEffect(() => {
     if (!activeChat || !session?.user) return;
 
@@ -325,17 +421,22 @@ export default function PeanutsMain({
       .channel(`match_chat_${activeChat.id}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages' },
+        { event: '*', schema: 'public', table: 'messages' },
         (payload) => {
-          const newMsg = payload.new as any;
-          if (
-            (newMsg.sender_id === session.user.id && newMsg.receiver_id === activeChat.id) ||
-            (newMsg.sender_id === activeChat.id && newMsg.receiver_id === session.user.id)
-          ) {
-            setMessages((prev) => {
-              if (prev.some((m) => m.id === newMsg.id.toString())) return prev;
-              return [...prev, newMsg];
-            });
+          if (payload.eventType === 'INSERT') {
+            const newMsg = payload.new as any;
+            if (
+              (newMsg.sender_id === session.user.id && newMsg.receiver_id === activeChat.id) ||
+              (newMsg.sender_id === activeChat.id && newMsg.receiver_id === session.user.id)
+            ) {
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === newMsg.id.toString())) return prev;
+                return [...prev, newMsg];
+              });
+            }
+          } else if (payload.eventType === 'DELETE') {
+            const deletedMsgId = payload.old.id;
+            setMessages((prev) => prev.filter((m) => m.id !== deletedMsgId));
           }
         }
       )
@@ -393,9 +494,11 @@ export default function PeanutsMain({
     }
   };
 
-  // ฟังก์ชันดึงและสุ่มสลับตำแหน่งโปรไฟล์ (Random Shuffle)
-  const fetchDiscoverProfiles = async (targetGender: string) => {
+  // ดึงโปรไฟล์ คัดกรองไอดีที่บล็อก และ Shuffle
+  const fetchDiscoverProfiles = async (targetGender: string, overrideBlocked?: string[]) => {
     setIsRefreshingDiscover(true);
+    const currentBlocked = overrideBlocked || blockedUserIds;
+
     const { data: myLikes } = await supabase
       .from('likes')
       .select('liked_user_id')
@@ -404,10 +507,13 @@ export default function PeanutsMain({
     const swipedIds = myLikes ? myLikes.map((l) => l.liked_user_id) : [];
     swipedIds.push(session.user.id);
 
+    // รวมรายการที่สไวป์แล้วและไอดีที่บล็อกไว้
+    const excludeIds = Array.from(new Set([...swipedIds, ...currentBlocked]));
+
     let query = supabase
       .from('profiles')
       .select('*')
-      .not('id', 'in', `(${swipedIds.join(',')})`);
+      .not('id', 'in', `(${excludeIds.join(',')})`);
 
     if (targetGender && targetGender !== 'all') {
       query = query.eq('gender', targetGender);
@@ -415,7 +521,6 @@ export default function PeanutsMain({
 
     const { data } = await query;
     if (data) {
-      // อัลกอริทึม Fisher-Yates สำหรับสุ่มสลับตำแหน่งข้อมูล
       const shuffled = [...data];
       for (let i = shuffled.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
@@ -430,8 +535,10 @@ export default function PeanutsMain({
     setIsRefreshingDiscover(false);
   };
 
-  const fetchMatches = async () => {
+  const fetchMatches = async (overrideBlocked?: string[]) => {
     setIsRefreshingMatches(true);
+    const currentBlocked = overrideBlocked || blockedUserIds;
+
     const { data: myLikes } = await supabase
       .from('likes')
       .select('liked_user_id')
@@ -452,7 +559,16 @@ export default function PeanutsMain({
       .in('user_id', likedIds);
 
     if (mutualLikes && mutualLikes.length > 0) {
-      const matchIds = mutualLikes.map((m) => m.user_id);
+      const matchIds = mutualLikes
+        .map((m) => m.user_id)
+        .filter((id) => !currentBlocked.includes(id));
+
+      if (matchIds.length === 0) {
+        setMatches([]);
+        setIsRefreshingMatches(false);
+        return;
+      }
+
       const { data: matchedProfiles } = await supabase
         .from('profiles')
         .select('*')
@@ -569,13 +685,46 @@ export default function PeanutsMain({
     const textToSend = chatInput.trim();
     setChatInput('');
 
-    await supabase.from('messages').insert({
+    // Optimistic Update UI ทันที
+    const tempMsg = {
+      id: `temp_${Date.now()}`,
+      sender_id: session.user.id,
+      receiver_id: activeChat.id,
+      content: textToSend,
+      created_at: new Date().toISOString()
+    };
+    setMessages((prev) => [...prev, tempMsg]);
+
+    const { data, error } = await supabase.from('messages').insert({
       sender_id: session.user.id,
       receiver_id: activeChat.id,
       content: textToSend
-    });
+    }).select().single();
 
-    sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', textToSend);
+    if (!error && data) {
+      setMessages((prev) => prev.map((m) => (m.id === tempMsg.id ? data : m)));
+      sendPushToDevice(activeChat.id, displayName || 'ข้อความใหม่', textToSend);
+    }
+  };
+
+  // ยกเลิกการส่งข้อความ (Unsend Message - ได้ทั้งข้อความ เสียง และรูปภาพ)
+  const handleUnsendMessage = async (messageId: string) => {
+    if (!confirm('คุณต้องการยกเลิกการส่งข้อความนี้ใช่หรือไม่?')) return;
+
+    // ลบจาก UI ทันที
+    setMessages((prev) => prev.filter((m) => m.id !== messageId));
+
+    // ลบใน Supabase
+    const { error } = await supabase
+      .from('messages')
+      .delete()
+      .eq('id', messageId)
+      .eq('sender_id', session.user.id);
+
+    if (error) {
+      alert('ไม่สามารถยกเลิกข้อความได้: ' + error.message);
+      fetchMessages(activeChat.id); // คืนค่าหากลบไม่สำเร็จ
+    }
   };
 
   const getAudioConfig = () => {
@@ -746,7 +895,6 @@ export default function PeanutsMain({
 
     const validPhotos = photos.filter((p) => p.trim() !== '');
 
-    // ตรวจสอบว่ามีรูปถ่ายอย่างน้อย 1 รูปหรือไม่
     if (validPhotos.length === 0) {
       alert('กรุณาอัปโหลดรูปโปรไฟล์อย่างน้อย 1 รูป ก่อนบันทึกครับ!');
       return;
@@ -895,15 +1043,37 @@ export default function PeanutsMain({
           </div>
         )}
 
-        {/* --- SELECTED PROFILE DETAIL MODAL --- */}
+        {/* --- SELECTED PROFILE DETAIL MODAL (WITH REPORT & BLOCK) --- */}
         {selectedProfile && (
           <div className="absolute inset-0 bg-slate-950/95 z-50 flex flex-col overflow-y-auto p-4 backdrop-blur-md">
-            <button 
-              onClick={() => setSelectedProfile(null)} 
-              className="self-start text-xs text-slate-400 hover:text-white flex items-center gap-1 mb-3 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800"
-            >
-              <ArrowLeft className="w-4 h-4" /> ย้อนกลับ
-            </button>
+            <div className="flex justify-between items-center mb-3">
+              <button 
+                onClick={() => setSelectedProfile(null)} 
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1 bg-slate-900 px-3 py-1.5 rounded-full border border-slate-800"
+              >
+                <ArrowLeft className="w-4 h-4" /> ย้อนกลับ
+              </button>
+
+              {/* ปุ่ม Report & Block สำหรับผู้ใช้อื่น */}
+              {selectedProfile.id !== session.user.id && (
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleReportUser(selectedProfile)}
+                    className="p-1.5 text-amber-400 hover:bg-amber-500/10 rounded-full transition"
+                    title="รายงานโปรไฟล์นี้"
+                  >
+                    <Flag className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => handleBlockUser(selectedProfile)}
+                    className="p-1.5 text-rose-400 hover:bg-rose-500/10 rounded-full transition"
+                    title="บล็อกโปรไฟล์นี้"
+                  >
+                    <ShieldAlert className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+            </div>
 
             <div className="bg-[#121721] border border-slate-800 rounded-3xl overflow-hidden shadow-2xl flex-1 flex flex-col">
               <div className="h-96 bg-slate-950 relative group shrink-0">
@@ -986,31 +1156,50 @@ export default function PeanutsMain({
           </div>
         )}
 
-        {/* --- ACTIVE MATCH CHAT VIEW --- */}
+        {/* --- ACTIVE MATCH CHAT VIEW (WITH UNSEND BUTTON) --- */}
         {activeChat ? (
           <div className="h-full flex flex-col bg-slate-950 overflow-hidden">
-            <header className="px-4 py-3 bg-[#121721] border-b border-slate-800 flex items-center gap-3 shrink-0 z-10">
-              <button onClick={() => setActiveChat(null)} className="p-1 text-slate-400 hover:text-white shrink-0">
-                <ArrowLeft className="w-5 h-5" />
-              </button>
-              
-              <div 
-                onClick={() => handleOpenProfileDetail(activeChat)}
-                className="flex items-center gap-3 cursor-pointer flex-1 min-w-0 hover:opacity-80 transition"
-              >
-                <div className="w-9 h-9 rounded-full bg-slate-800 overflow-hidden border border-emerald-500/40 shrink-0">
-                  <img 
-                    src={getProfilePhotos(activeChat)[0] || activeChat.avatar_url} 
-                    alt="" 
-                    className="w-full h-full object-cover" 
-                  />
+            <header className="px-4 py-3 bg-[#121721] border-b border-slate-800 flex items-center justify-between shrink-0 z-10">
+              <div className="flex items-center gap-3 flex-1 min-w-0">
+                <button onClick={() => setActiveChat(null)} className="p-1 text-slate-400 hover:text-white shrink-0">
+                  <ArrowLeft className="w-5 h-5" />
+                </button>
+                
+                <div 
+                  onClick={() => handleOpenProfileDetail(activeChat)}
+                  className="flex items-center gap-3 cursor-pointer flex-1 min-w-0 hover:opacity-80 transition"
+                >
+                  <div className="w-9 h-9 rounded-full bg-slate-800 overflow-hidden border border-emerald-500/40 shrink-0">
+                    <img 
+                      src={getProfilePhotos(activeChat)[0] || activeChat.avatar_url} 
+                      alt="" 
+                      className="w-full h-full object-cover" 
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <h3 className="text-xs font-bold text-white flex items-center gap-1 truncate">
+                      <span>{activeChat.display_name}</span>
+                    </h3>
+                    <span className="text-[10px] text-amber-400 truncate block">{activeChat.faculty}</span>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <h3 className="text-xs font-bold text-white flex items-center gap-1 truncate">
-                    <span>{activeChat.display_name}</span>
-                  </h3>
-                  <span className="text-[10px] text-amber-400 truncate block">{activeChat.faculty}</span>
-                </div>
+              </div>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => handleReportUser(activeChat)}
+                  className="p-1.5 text-slate-400 hover:text-amber-400 rounded-lg transition"
+                  title="รายงานผู้ใช้"
+                >
+                  <Flag className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => handleBlockUser(activeChat)}
+                  className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg transition"
+                  title="บล็อกผู้ใช้"
+                >
+                  <ShieldAlert className="w-4 h-4" />
+                </button>
               </div>
             </header>
 
@@ -1023,8 +1212,19 @@ export default function PeanutsMain({
                 const imageUrl = isImage ? m.content.replace('[IMAGE]:', '') : '';
 
                 return (
-                  <div key={m.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl text-xs ${
+                  <div key={m.id} className={`flex items-center gap-1.5 group ${isMe ? 'justify-end' : 'justify-start'}`}>
+                    {/* ปุ่ม Unsend ข้อความ สำหรับฝั่งผู้ส่ง */}
+                    {isMe && (
+                      <button
+                        onClick={() => handleUnsendMessage(m.id)}
+                        className="opacity-0 group-hover:opacity-100 p-1 text-slate-500 hover:text-rose-400 transition"
+                        title="ยกเลิกการส่งข้อความ (Unsend)"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    <div className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl text-xs relative ${
                       isMe ? 'bg-emerald-500 text-slate-950 font-medium' : 'bg-slate-900 text-white border border-slate-800'
                     }`}>
                       {isVoice ? (
@@ -1108,7 +1308,6 @@ export default function PeanutsMain({
                     </div>
 
                     <div className="flex items-center gap-2">
-                      {/* ปุ่มรีเฟรชหน้าค้นหา */}
                       <button 
                         onClick={() => fetchDiscoverProfiles(interestedIn)} 
                         disabled={isRefreshingDiscover}
@@ -1281,9 +1480,8 @@ export default function PeanutsMain({
                     </h2>
                     
                     <div className="flex items-center gap-2">
-                      {/* ปุ่มรีเฟรชรายการคู่ Match */}
                       <button
-                        onClick={fetchMatches}
+                        onClick={() => fetchMatches()}
                         disabled={isRefreshingMatches}
                         className="w-8 h-8 rounded-full bg-[#121721] border border-slate-800 text-slate-300 hover:text-white flex items-center justify-center transition active:scale-90"
                         title="รีเฟรชรายการคู่ Match"
@@ -1379,7 +1577,7 @@ export default function PeanutsMain({
                 </div>
               )}
 
-              {/* TAB 3: PROFILE FORM */}
+              {/* TAB 3: PROFILE FORM & BLOCKED USERS */}
               {tab === 'profile' && (
                 <div className="p-5 space-y-5">
                   <div className="flex justify-between items-center">
@@ -1525,6 +1723,28 @@ export default function PeanutsMain({
                       {saving ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลง'}
                     </button>
                   </form>
+
+                  {/* รายการบล็อกผู้ใช้งาน */}
+                  {blockedUserIds.length > 0 && (
+                    <div className="bg-[#121721] border border-slate-800 rounded-2xl p-4 space-y-3">
+                      <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                        <ShieldAlert className="w-4 h-4 text-rose-400" /> รายการที่บล็อก ({blockedUserIds.length})
+                      </h3>
+                      <div className="space-y-2">
+                        {blockedUserIds.map((blockedId) => (
+                          <div key={blockedId} className="flex justify-between items-center bg-slate-950 p-2.5 rounded-xl border border-slate-800 text-xs">
+                            <span className="text-slate-400 font-mono text-[11px] truncate max-w-[200px]">ID: {blockedId}</span>
+                            <button
+                              onClick={() => handleUnblockUser(blockedId)}
+                              className="text-[11px] text-amber-400 hover:text-amber-300 font-bold px-2 py-1 bg-amber-500/10 rounded-lg border border-amber-500/20"
+                            >
+                              ปลดบล็อก
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
                   <button
                     type="button"
