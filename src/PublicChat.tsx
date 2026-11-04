@@ -46,14 +46,16 @@ export default function PublicChat({ onBack }: { onBack: () => void }) {
   }, [messages]);
 
   const fetchMessages = async () => {
+    // 1. ดึง 100 ข้อความล่าสุดจาก DB (เรียงจากใหม่ไปเก่า)
     const { data } = await supabase
       .from('public_chat_messages')
       .select('*')
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(100);
 
     if (data) {
-      setMessages(data as any);
+      // 2. กลับลำดับข้อมูล (reverse) เพื่อให้ข้อความใหม่อยู่ล่างสุดของแชท
+      setMessages(data.reverse() as any);
     }
   };
 
